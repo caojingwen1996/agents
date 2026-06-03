@@ -1,0 +1,227 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="2380" viewBox="0 0 1800 2380">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F8FAFC"/>
+      <stop offset="100%" stop-color="#EEF2F7"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0F172A" flood-opacity="0.12"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#334155"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563EB"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#DC2626"/>
+    </marker>
+    <style>
+      .title { font: 700 46px 'Microsoft YaHei','Noto Sans CJK SC',Arial,sans-serif; fill:#0F172A; }
+      .subtitle { font: 400 22px 'Microsoft YaHei','Noto Sans CJK SC',Arial,sans-serif; fill:#475569; }
+      .box-title { font: 700 24px 'Microsoft YaHei','Noto Sans CJK SC',Arial,sans-serif; fill:#0F172A; }
+      .box-text { font: 400 18px 'Microsoft YaHei','Noto Sans CJK SC',Arial,sans-serif; fill:#334155; }
+      .small-text { font: 400 16px 'Microsoft YaHei','Noto Sans CJK SC',Arial,sans-serif; fill:#475569; }
+      .lane-title { font: 700 28px 'Microsoft YaHei','Noto Sans CJK SC',Arial,sans-serif; fill:#1E293B; }
+      .tag { font: 700 15px 'Microsoft YaHei','Noto Sans CJK SC',Arial,sans-serif; fill:#FFFFFF; }
+      .note-title { font: 700 20px 'Microsoft YaHei','Noto Sans CJK SC',Arial,sans-serif; fill:#0F172A; }
+      .note-text { font: 400 16px 'Microsoft YaHei','Noto Sans CJK SC',Arial,sans-serif; fill:#334155; }
+      .arrow-label { font: 700 16px 'Microsoft YaHei','Noto Sans CJK SC',Arial,sans-serif; fill:#334155; }
+    </style>
+  </defs>
+  <rect width="1800" height="2380" fill="url(#bg)"/>
+
+  <text x="900" y="78" text-anchor="middle" class="title">Quant Backtest Lab 工作流程</text>
+  <text x="900" y="118" text-anchor="middle" class="subtitle">自然语言交易想法 → 可运行回测脚本 → 标准结果文件 → HTML 仪表盘 → 自检后交付</text>
+  <g filter="url(#shadow)">
+    <rect x="560" y="160" width="680" height="110" rx="24" fill="#FFFFFF" stroke="#93C5FD" stroke-width="2"/>
+    <rect x="582" y="180" width="126" height="30" rx="15" fill="#2563EB"/>
+    <text x="645.0" y="201" text-anchor="middle" class="tag">TRIGGER</text>
+    <text x="588" y="238" class="box-title" fill="#0F172A">1. 触发识别</text>
+    <text x="588" y="272" class="box-text">用户提出回测、事件研究、策略有效性验证、多标的选股或组合再</text>
+    <text x="588" y="299" class="box-text">平衡需求。</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="560" y="315" width="680" height="130" rx="24" fill="#FFFFFF" stroke="#A7F3D0" stroke-width="2"/>
+    <rect x="582" y="335" width="90" height="30" rx="15" fill="#059669"/>
+    <text x="627.0" y="356" text-anchor="middle" class="tag">SCOPE</text>
+    <text x="588" y="393" class="box-title" fill="#0F172A">2. 语言锁定 + 范围检查</text>
+    <text x="588" y="427" class="box-text">所有回复、仪表盘、图表、表格跟随用户最新提问语言；仅支持日</text>
+    <text x="588" y="454" class="box-text">频及更低频，不支持分钟线、tick、特殊衍生品定价。</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="560" y="500" width="680" height="145" rx="24" fill="#FFFFFF" stroke="#FDE68A" stroke-width="2"/>
+    <rect x="582" y="520" width="126" height="30" rx="15" fill="#D97706"/>
+    <text x="645.0" y="541" text-anchor="middle" class="tag">CLARIFY</text>
+    <text x="588" y="578" class="box-title" fill="#0F172A">3. 澄清判断</text>
+    <text x="588" y="612" class="box-text">只问会改变结果的问题：信号定义、生命周期、复合退出语义；其</text>
+    <text x="588" y="639" class="box-text">余使用安全默认值，例如日频、次日开盘执行、连续策略 3bp</text>
+    <text x="588" y="666" class="box-text">成本、A 股 T+1 与手数。</text>
+  </g>
+  <g filter="url(#shadow)">
+    <polygon points="900,675.0 1200.0,765 900,855.0 600.0,765" fill="#FFF7ED" stroke="#FB923C" stroke-width="2"/>
+    <text x="900" y="749" text-anchor="middle" class="box-title">4. 任务分类</text>
+    <text x="900" y="783" text-anchor="middle" class="box-text">策略回测 还是 事件研究？</text>
+  </g>
+  <path d="M 900 270 L 900 315" fill="none" stroke="#334155" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M 900 445 L 900 500" fill="none" stroke="#334155" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M 900 645 L 900 675" fill="none" stroke="#334155" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="80" y="900" width="760" height="1050" rx="28" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="2"/>
+  <rect x="960" y="900" width="760" height="1050" rx="28" fill="#F0FDF4" stroke="#BBF7D0" stroke-width="2"/>
+  <text x="460" y="955" text-anchor="middle" class="lane-title">策略回测路径</text>
+  <text x="1340" y="955" text-anchor="middle" class="lane-title">事件研究路径</text>
+  <path d="M 780 820 L 460 860 L 460 990" fill="none" stroke="#2563EB" stroke-width="3" marker-end="url(#arrowBlue)"/>
+  <path d="M 1020 820 L 1340 860 L 1340 990" fill="none" stroke="#059669" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="530" y="865" class="arrow-label">规则型策略 / 组合 / 轮动</text>
+  <text x="1200" y="865" class="arrow-label">事件后收益 / 信号后持有 N 天</text>
+  <g filter="url(#shadow)">
+    <rect x="130" y="990" width="660" height="120" rx="24" fill="#FFFFFF" stroke="#93C5FD" stroke-width="2"/>
+    <rect x="152" y="1010" width="88" height="30" rx="15" fill="#2563EB"/>
+    <text x="196.0" y="1031" text-anchor="middle" class="tag">REFS</text>
+    <text x="158" y="1068" class="box-title" fill="#0F172A">5A. 读取强制参考</text>
+    <text x="158" y="1102" class="box-text">先读 pandas 坑点、通用checklist、策略解析规则；多策略交</text>
+    <text x="158" y="1129" class="box-text">互时继续读取对应解析说明。</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="130" y="1165" width="660" height="130" rx="24" fill="#FFFFFF" stroke="#93C5FD" stroke-width="2"/>
+    <rect x="152" y="1185" width="88" height="30" rx="15" fill="#2563EB"/>
+    <text x="196.0" y="1206" text-anchor="middle" class="tag">DATA</text>
+    <text x="158" y="1243" class="box-title" fill="#0F172A">6A. 结构化策略 + 取数</text>
+    <text x="158" y="1277" class="box-text">把自然语言转成明确的入场、退出、仓位、费用、时间范围；取</text>
+    <text x="158" y="1304" class="box-text">数优先 westock-data，股票池筛选用 westock-tool。</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="130" y="1345" width="660" height="150" rx="24" fill="#FFFFFF" stroke="#93C5FD" stroke-width="2"/>
+    <rect x="152" y="1365" width="88" height="30" rx="15" fill="#2563EB"/>
+    <text x="196.0" y="1386" text-anchor="middle" class="tag">CODE</text>
+    <text x="158" y="1423" class="box-title" fill="#0F172A">7A. 编写自包含回测脚本</text>
+    <text x="158" y="1457" class="box-text">纯 Python + pandas；信号在当日确认，次日开盘执行；处理</text>
+    <text x="158" y="1484" class="box-text">warmup、停牌缺失值、费用、A 股 T+1、手数和期末强制平仓。</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="130" y="1545" width="660" height="125" rx="24" fill="#FFFFFF" stroke="#93C5FD" stroke-width="2"/>
+    <rect x="152" y="1565" width="108" height="30" rx="15" fill="#2563EB"/>
+    <text x="206.0" y="1586" text-anchor="middle" class="tag">EXPORT</text>
+    <text x="158" y="1623" class="box-title" fill="#0F172A">8A. 标准导出</text>
+    <text x="158" y="1657" class="box-text">策略回测必须生成三件套：权益曲线、交易明细、汇总指标；窗</text>
+    <text x="158" y="1684" class="box-text">口按评估区间切片，避免 warmup 污染指标。</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="130" y="1725" width="660" height="145" rx="24" fill="#FFFFFF" stroke="#93C5FD" stroke-width="2"/>
+    <rect x="152" y="1745" width="88" height="30" rx="15" fill="#2563EB"/>
+    <text x="196.0" y="1766" text-anchor="middle" class="tag">VIEW</text>
+    <text x="158" y="1803" class="box-title" fill="#0F172A">9A. 仪表盘与图表</text>
+    <text x="158" y="1837" class="box-text">基于标准结果渲染 index.html；默认另出有助于理解结果的</text>
+    <text x="158" y="1864" class="box-text">PNG 图，HTML 不手写、不脱离模板。</text>
+  </g>
+  <path d="M 460 1110 L 460 1165" fill="none" stroke="#2563EB" stroke-width="3" marker-end="url(#arrowBlue)"/>
+  <path d="M 460 1295 L 460 1345" fill="none" stroke="#2563EB" stroke-width="3" marker-end="url(#arrowBlue)"/>
+  <path d="M 460 1495 L 460 1545" fill="none" stroke="#2563EB" stroke-width="3" marker-end="url(#arrowBlue)"/>
+  <path d="M 460 1670 L 460 1725" fill="none" stroke="#2563EB" stroke-width="3" marker-end="url(#arrowBlue)"/>
+  <g filter="url(#shadow)">
+    <rect x="1010" y="990" width="660" height="120" rx="24" fill="#FFFFFF" stroke="#86EFAC" stroke-width="2"/>
+    <rect x="1032" y="1010" width="90" height="30" rx="15" fill="#059669"/>
+    <text x="1077.0" y="1031" text-anchor="middle" class="tag">EVENT</text>
+    <text x="1038" y="1068" class="box-title" fill="#0F172A">5B. 明确事件与标签</text>
+    <text x="1038" y="1102" class="box-text">每个事件必须有可读标签；事件日期、买入日期、卖出日期和持</text>
+    <text x="1038" y="1129" class="box-text">有期要能被复核。</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="1010" y="1165" width="660" height="130" rx="24" fill="#FFFFFF" stroke="#86EFAC" stroke-width="2"/>
+    <rect x="1032" y="1185" width="88" height="30" rx="15" fill="#059669"/>
+    <text x="1076.0" y="1206" text-anchor="middle" class="tag">DATA</text>
+    <text x="1038" y="1243" class="box-title" fill="#0F172A">6B. 取数与事件对齐</text>
+    <text x="1038" y="1277" class="box-text">仍走结构化时序数据；把事件日期映射到可交易日，并处理缺失</text>
+    <text x="1038" y="1304" class="box-text">、停牌或数据覆盖不足。</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="1010" y="1345" width="660" height="150" rx="24" fill="#FFFFFF" stroke="#86EFAC" stroke-width="2"/>
+    <rect x="1032" y="1365" width="88" height="30" rx="15" fill="#059669"/>
+    <text x="1076.0" y="1386" text-anchor="middle" class="tag">CALC</text>
+    <text x="1038" y="1423" class="box-title" fill="#0F172A">7B. 直接计算事件收益</text>
+    <text x="1038" y="1457" class="box-text">不模拟现金和持仓；一行事件对应一条交易记录，核心字段是事</text>
+    <text x="1038" y="1484" class="box-text">件收益率；默认不扣费用，避免扭曲平均收益。</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="1010" y="1545" width="660" height="125" rx="24" fill="#FFFFFF" stroke="#86EFAC" stroke-width="2"/>
+    <rect x="1032" y="1565" width="126" height="30" rx="15" fill="#059669"/>
+    <text x="1095.0" y="1586" text-anchor="middle" class="tag">METRICS</text>
+    <text x="1038" y="1623" class="box-title" fill="#0F172A">8B. 事件级指标</text>
+    <text x="1038" y="1657" class="box-text">输出平均、median、胜率、最好与最差事件；不伪造年化收益、</text>
+    <text x="1038" y="1684" class="box-text">Sharpe、最大回撤等组合指标。</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="1010" y="1725" width="660" height="145" rx="24" fill="#FFFFFF" stroke="#86EFAC" stroke-width="2"/>
+    <rect x="1032" y="1745" width="88" height="30" rx="15" fill="#059669"/>
+    <text x="1076.0" y="1766" text-anchor="middle" class="tag">VIEW</text>
+    <text x="1038" y="1803" class="box-title" fill="#0F172A">9B. 事件仪表盘</text>
+    <text x="1038" y="1837" class="box-text">按问题选择 stats、timeline 或both；事件表列名和图上标记</text>
+    <text x="1038" y="1864" class="box-text">必须服务事件解释。</text>
+  </g>
+  <path d="M 1340 1110 L 1340 1165" fill="none" stroke="#059669" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M 1340 1295 L 1340 1345" fill="none" stroke="#059669" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M 1340 1495 L 1340 1545" fill="none" stroke="#059669" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M 1340 1670 L 1340 1725" fill="none" stroke="#059669" stroke-width="3" marker-end="url(#arrow)"/>
+  <g filter="url(#shadow)">
+    <rect x="390" y="2025" width="1020" height="150" rx="24" fill="#FFF7ED" stroke="#FDBA74" stroke-width="2"/>
+    <rect x="412" y="2045" width="180" height="30" rx="15" fill="#EA580C"/>
+    <text x="502.0" y="2066" text-anchor="middle" class="tag">SELF-CHECK</text>
+    <text x="418" y="2103" class="box-title" fill="#0F172A">10. 四步自检：未通过就不能交付</text>
+    <text x="418" y="2137" class="box-text">可运行并产出文件 → 5 项坑点检查 → sanity check + 对抗式审查 →本地渲染仪表盘检查。任一步</text>
+    <text x="418" y="2164" class="box-text">失败，修复后必须重跑、重导出、重渲染、重检。</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="390" y="2210" width="1020" height="120" rx="24" fill="#F8FAFC" stroke="#94A3B8" stroke-width="2"/>
+    <rect x="412" y="2230" width="126" height="30" rx="15" fill="#475569"/>
+    <text x="475.0" y="2251" text-anchor="middle" class="tag">DELIVER</text>
+    <text x="418" y="2288" class="box-title" fill="#0F172A">11. 最终回复：A / B / C 三段</text>
+    <text x="418" y="2322" class="box-text">先给结论，再说明实现细节、已知偏差、结果解读；不堆文件清单，直接告诉用户结果意味着什么。</text>
+  </g>
+  <path d="M 460 1870 L 460 1985 L 715 2025" fill="none" stroke="#334155" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M 1340 1870 L 1340 1985 L 1085 2025" fill="none" stroke="#334155" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M 900 2175 L 900 2210" fill="none" stroke="#334155" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M 390 2100 L 180 2100 L 180 1480 L 130 1480" fill="none" stroke="#DC2626" stroke-width="3" stroke-dasharray="10 8" marker-end="url(#arrowRed)"/>
+  <text x="200" y="1460" class="arrow-label" fill="#DC2626">失败：修复逻辑 / 数据 / 仪表盘后重跑</text>
+  <g filter="url(#shadow)">
+    <rect x="80" y="160" width="390" height="250" rx="24" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="2"/>
+    <rect x="102" y="180" width="198" height="30" rx="15" fill="#64748B"/>
+    <text x="201.0" y="201" text-anchor="middle" class="tag">DATA SOURCE</text>
+    <text x="108" y="238" class="box-title" fill="#0F172A">数据源优先级</text>
+    <text x="108" y="272" class="box-text">1.westock-data：行情、财务、宏观</text>
+    <text x="108" y="299" class="box-text">、指数等结构化时序</text>
+    <text x="108" y="326" class="box-text">2.westock-tool：股票池与筛选</text>
+    <text x="108" y="353" class="box-text">3.neodata：只做补充叙事或事件日期</text>
+    <text x="108" y="380" class="box-text">确认</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="1330" y="160" width="390" height="250" rx="24" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="2"/>
+    <rect x="1352" y="180" width="180" height="30" rx="15" fill="#64748B"/>
+    <text x="1442.0" y="201" text-anchor="middle" class="tag">HARD RULES</text>
+    <text x="1358" y="238" class="box-title" fill="#0F172A">硬性红线</text>
+    <text x="1358" y="272" class="box-text">禁止回看偏差；禁止用语义搜索当主</text>
+    <text x="1358" y="299" class="box-text">数据源；禁止backtrader/vectorbt；</text>
+    <text x="1358" y="326" class="box-text">禁止手写独立</text>
+    <text x="1358" y="353" class="box-text">HTML；自检失败禁止交付。</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="80" y="460" width="390" height="230" rx="24" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="2"/>
+    <rect x="102" y="480" width="108" height="30" rx="15" fill="#64748B"/>
+    <text x="156.0" y="501" text-anchor="middle" class="tag">OUTPUT</text>
+    <text x="108" y="538" class="box-title" fill="#0F172A">输出物契约</text>
+    <text x="108" y="572" class="box-text">策略回测：equity / trades /</text>
+    <text x="108" y="599" class="box-text">summary 三件套 + index.html +</text>
+    <text x="108" y="626" class="box-text">必要 PNG。</text>
+    <text x="108" y="653" class="box-text">事件研究：事件级 trades.csv +</text>
+    <text x="108" y="680" class="box-text">事件级统计 + 对应仪表盘。</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="1330" y="460" width="390" height="230" rx="24" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="2"/>
+    <rect x="1352" y="480" width="88" height="30" rx="15" fill="#64748B"/>
+    <text x="1396.0" y="501" text-anchor="middle" class="tag">BIAS</text>
+    <text x="1358" y="538" class="box-title" fill="#0F172A">偏差管理</text>
+    <text x="1358" y="572" class="box-text">所有用户可见解释都要说明执行时点</text>
+    <text x="1358" y="599" class="box-text">、成本、复权、warmup、幸存者偏差</text>
+    <text x="1358" y="626" class="box-text">、流动性和日线限制。</text>
+  </g>
+  <text x="900" y="2360" text-anchor="middle" class="small-text">根据上传的 quant-backtest-lab / SKILL.md 工作流整理；用于 llmwiki 入库或技能说明页。</text>
+</svg>
