@@ -1,0 +1,24 @@
+{
+  "name": "strategy-backtest-expert",
+  "version": "1.0.0+codex.20260605023011",
+  "description": "Quant strategy backtest expert for turning natural-language trading strategies into runnable Python and pandas backtests with metrics, charts, dashboards, and limitations analysis.",
+  "author": {
+    "name": "CodeBuddy Teams"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Strategy Backtest Expert",
+    "shortDescription": "Build and interpret quant strategy backtests.",
+    "longDescription": "Turns natural-language trading strategies into runnable Python and pandas backtests, then delivers metrics, charts, an HTML dashboard, and an honest read of the result with limitations.",
+    "developerName": "CodeBuddy Teams",
+    "category": "Finance",
+    "capabilities": [
+      "strategy backtesting",
+      "quant analysis",
+      "financial data workflows"
+    ],
+    "defaultPrompt": [
+      "Backtest my trading strategy with metrics, charts, and a clear interpretation."
+    ]
+  }
+}
