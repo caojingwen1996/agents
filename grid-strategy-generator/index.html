@@ -818,7 +818,144 @@
       maximumFractionDigits: 2,
     });
     const integer = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
+    const savedAtFormatter = new Intl.DateTimeFormat("zh-CN", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
+    const STRATEGY_STORAGE_KEY = "grid-strategy-generator.saved-strategies.v1";
+    const calculationFieldIds = new Set([
+      "symbol-name",
+      "start-price",
+      "step-pct",
+      "max-drop-pct",
+      "funding-mode",
+      "funding-amount",
+      "fee-pct",
+      "profit-retention",
+    ]);
+    const saveStrategyButton = byId("save-strategy-button");
     let latestPlan = null;
+    let savedStrategies = [];
+    let activeSavedSymbol = null;
+    let planIsCurrent = false;
+
+    function setSaveStatus(message, isError = false) {
+      const status = byId("save-status");
+      status.textContent = message;
+      status.classList.toggle("is-error", isError);
+      status.hidden = !message;
+    }
+
+    function setPlanCurrent(isCurrent) {
+      planIsCurrent = isCurrent;
+      saveStrategyButton.disabled = !planIsCurrent;
+    }
+
+    function updateFundingLabel() {
+      byId("funding-label").textContent = byId("funding-mode").value === "total"
+        ? "总资金（元）"
+        : "每格金额（元）";
+    }
+
+    function downloadPlanCsv(symbol, plan) {
+      const csv = window.GridExporter.buildGridCsv(plan.input, plan.result);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      try {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = window.GridExporter.createExportFilename(symbol);
+        document.body.append(link);
+        link.click();
+        link.remove();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    function renderSavedStrategies() {
+      const list = byId("saved-strategy-list");
+      byId("saved-strategy-empty").hidden = savedStrategies.length > 0;
+      list.replaceChildren(...savedStrategies.map((record) => {
+        const item = document.createElement("div");
+        item.className = "strategy-item";
+        item.classList.toggle("is-active", record.symbol === activeSavedSymbol);
+        item.setAttribute("role", "listitem");
+
+        const loadButton = document.createElement("button");
+        loadButton.type = "button";
+        loadButton.className = "strategy-load";
+        loadButton.setAttribute("aria-label", `载入 ${record.symbol} 策略`);
+        loadButton.addEventListener("click", () => loadStrategy(record));
+        const name = document.createElement("strong");
+        name.textContent = record.symbol;
+        const savedAt = document.createElement("time");
+        savedAt.dateTime = record.savedAt;
+        savedAt.textContent = savedAtFormatter.format(new Date(record.savedAt));
+        loadButton.append(name, savedAt);
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "strategy-delete";
+        deleteButton.textContent = "删除";
+        deleteButton.setAttribute("aria-label", `删除 ${record.symbol} 策略`);
+        deleteButton.addEventListener("click", () => deleteStrategy(record));
+
+        item.append(loadButton, deleteButton);
+        return item;
+      }));
+    }
+
+    function loadSavedStrategies() {
+      try {
+        const parsed = window.GridStrategyStore.parseStore(
+          localStorage.getItem(STRATEGY_STORAGE_KEY),
+        );
+        savedStrategies = parsed.records;
+        if (parsed.skippedCount > 0) {
+          setSaveStatus(`有 ${parsed.skippedCount} 条本地策略记录无法读取，已跳过。`, true);
+        }
+      } catch (error) {
+        savedStrategies = [];
+        setSaveStatus(`无法读取本地策略：${error.message}`, true);
+      }
+      renderSavedStrategies();
+    }
+
+    function loadStrategy(record) {
+      byId("symbol-name").value = record.symbol;
+      byId("start-price").value = record.input.startPrice;
+      byId("step-pct").value = record.input.stepPct;
+      byId("max-drop-pct").value = record.input.maxDropPct;
+      byId("funding-mode").value = record.input.fundingMode;
+      byId("funding-amount").value = record.input.amount;
+      byId("fee-pct").value = record.input.feePct;
+      byId("profit-retention").value = String(record.input.profitRetentionMultiple);
+      updateFundingLabel();
+      activeSavedSymbol = record.symbol;
+      renderSavedStrategies();
+      setSaveStatus("");
+      byId("grid-form").requestSubmit();
+    }
+
+    function deleteStrategy(record) {
+      const confirmed = window.confirm(
+        `确定删除“${record.symbol}”策略吗？已下载的 CSV 不会被删除。`,
+      );
+      if (!confirmed) return;
+      const nextRecords = window.GridStrategyStore.removeRecord(savedStrategies, record.symbol);
+      try {
+        localStorage.setItem(STRATEGY_STORAGE_KEY,
+          window.GridStrategyStore.serializeStore(nextRecords),
+        );
+        savedStrategies = nextRecords;
+        if (activeSavedSymbol === record.symbol) activeSavedSymbol = null;
+        renderSavedStrategies();
+        setSaveStatus(`已从左侧列表删除“${record.symbol}”。`);
+      } catch (error) {
+        setSaveStatus(`删除失败：${error.message}`, true);
+      }
+    }
 
     function metric(label, value, tone = "") {
       const item = document.createElement("div");
@@ -930,15 +1067,25 @@
       byId("results").hidden = false;
     }
 
-    byId("funding-mode").addEventListener("change", (event) => {
-      byId("funding-label").textContent = event.target.value === "total"
-        ? "总资金（元）"
-        : "每格金额（元）";
-    });
+    byId("funding-mode").addEventListener("change", updateFundingLabel);
 
     for (const button of document.querySelectorAll("[data-step]")) {
       button.addEventListener("click", () => {
         byId("step-pct").value = button.dataset.step;
+        setPlanCurrent(false);
+        setSaveStatus(latestPlan ? "参数已修改，请重新生成后再保存。" : "");
+      });
+    }
+
+    for (const eventName of ["input", "change"]) {
+      byId("grid-form").addEventListener(eventName, (event) => {
+        if (!calculationFieldIds.has(event.target.id)) return;
+        setPlanCurrent(false);
+        setSaveStatus(latestPlan ? "参数已修改，请重新生成后再保存。" : "");
+        if (event.target.id === "symbol-name") {
+          activeSavedSymbol = null;
+          renderSavedStrategies();
+        }
       });
     }
 
@@ -960,8 +1107,11 @@
         const result = window.GridCalculator.calculateGrid(input);
         latestPlan = { input: { ...input }, result };
         renderResult(result);
+        setPlanCurrent(true);
+        setSaveStatus("");
       } catch (error) {
         byId("results").hidden = true;
+        setPlanCurrent(false);
         errorBox.textContent = `${error.message}，请修改参数后重新生成。`;
         errorBox.hidden = false;
         errorBox.focus();
@@ -982,17 +1132,62 @@
       }
 
       errorBox.hidden = true;
-      const csv = window.GridExporter.buildGridCsv(latestPlan.input, latestPlan.result);
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = window.GridExporter.createExportFilename(symbol);
-      document.body.append(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      downloadPlanCsv(symbol, latestPlan);
     });
+
+    saveStrategyButton.addEventListener("click", () => {
+      const symbolInput = byId("symbol-name");
+      const symbol = symbolInput.value.trim();
+      if (!symbol) {
+        setSaveStatus("请填写标的名称并重新生成网格计划。", true);
+        symbolInput.focus();
+        return;
+      }
+      if (!latestPlan) {
+        setSaveStatus("请先生成网格计划。", true);
+        return;
+      }
+      if (!planIsCurrent) {
+        setSaveStatus("参数已修改，请重新生成后再保存。", true);
+        return;
+      }
+
+      const record = window.GridStrategyStore.createRecord(symbol, latestPlan.input, new Date());
+      const nextRecords = window.GridStrategyStore.upsertRecord(savedStrategies, record);
+      let csvSaved = false;
+      let indexSaved = false;
+
+      try {
+        downloadPlanCsv(symbol, latestPlan);
+        csvSaved = true;
+      } catch (error) {
+        console.error("CSV download failed", error);
+      }
+
+      try {
+        localStorage.setItem(STRATEGY_STORAGE_KEY,
+          window.GridStrategyStore.serializeStore(nextRecords),
+        );
+        savedStrategies = nextRecords;
+        activeSavedSymbol = symbol;
+        renderSavedStrategies();
+        indexSaved = true;
+      } catch (error) {
+        console.error("Strategy index save failed", error);
+      }
+
+      if (csvSaved && indexSaved) {
+        setSaveStatus("策略已保存到左侧列表，CSV 已下载。");
+      } else if (csvSaved) {
+        setSaveStatus("CSV 已下载，但左侧列表保存失败。", true);
+      } else if (indexSaved) {
+        setSaveStatus("策略已保存到左侧列表，但 CSV 下载失败。", true);
+      } else {
+        setSaveStatus("策略保存失败，CSV 和左侧列表均未保存。", true);
+      }
+    });
+
+    loadSavedStrategies();
   </script>
 </body>
 </html>

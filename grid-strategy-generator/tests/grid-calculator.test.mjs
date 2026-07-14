@@ -532,3 +532,15 @@ test("contains a responsive saved-strategy sidebar and save feedback", () => {
   assert.match(html, /aria-live=["']polite["']/);
   assert.match(html, /@media \(max-width: 900px\)/);
 });
+
+test("wires local save, reload, overwrite, and confirmed delete behavior", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  assert.match(html, /localStorage\.getItem\(STRATEGY_STORAGE_KEY\)/);
+  assert.match(html, /localStorage\.setItem\(STRATEGY_STORAGE_KEY/);
+  assert.match(html, /window\.confirm\(/);
+  assert.match(html, /requestSubmit\(\)/);
+  assert.match(html, /GridStrategyStore\.upsertRecord/);
+  assert.match(html, /GridStrategyStore\.removeRecord/);
+  assert.match(html, /GridExporter\.buildGridCsv/);
+  assert.match(html, /saveStrategyButton\.disabled = !planIsCurrent/);
+});
