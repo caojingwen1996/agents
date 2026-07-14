@@ -44,12 +44,12 @@ def fetch_a_share(stock_code: str, start_date: str, end_date: str):
     compact_start = start_date.replace("-", "")
     compact_end = end_date.replace("-", "")
     if stock_code.startswith("5"):
-        frame = ak.fund_etf_hist_sina(symbol=_tencent_symbol(stock_code))
-        dates = pd.to_datetime(frame["date"], errors="coerce")
-        frame = frame.loc[
+        daily_frame = ak.fund_etf_hist_sina(symbol=_tencent_symbol(stock_code))
+        dates = pd.to_datetime(daily_frame["date"], errors="coerce")
+        latest_daily_date = dates.max()
+        frame = daily_frame.loc[
             (dates >= pd.Timestamp(start_date)) & (dates <= pd.Timestamp(end_date))
         ].copy()
-        latest_daily_date = pd.to_datetime(frame["date"], errors="coerce").max()
         if pd.notna(latest_daily_date) and latest_daily_date < pd.Timestamp(end_date):
             try:
                 spot = ak.fund_etf_spot_em()
@@ -57,7 +57,11 @@ def fetch_a_share(stock_code: str, start_date: str, end_date: str):
                 row = spot.loc[code_column == stock_code].iloc[0]
                 spot_date = pd.to_datetime(row["数据日期"], errors="coerce")
                 spot_price = pd.to_numeric(row["最新价"], errors="coerce")
-                if pd.notna(spot_date) and pd.notna(spot_price) and spot_date <= pd.Timestamp(end_date):
+                if (
+                    pd.notna(spot_date)
+                    and pd.notna(spot_price)
+                    and pd.Timestamp(start_date) <= spot_date <= pd.Timestamp(end_date)
+                ):
                     frame = pd.concat(
                         [
                             frame,

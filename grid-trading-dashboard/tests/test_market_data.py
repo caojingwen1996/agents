@@ -54,6 +54,28 @@ def test_fetcher_appends_today_etf_spot_price_when_daily_history_is_stale(monkey
     assert prices["close"].tolist() == [1.679, 1.774]
 
 
+def test_fetcher_uses_today_etf_spot_when_requested_day_has_no_daily_row(monkeypatch):
+    monkeypatch.setattr(
+        market_data.ak,
+        "fund_etf_hist_sina",
+        lambda **_kwargs: pd.DataFrame(
+            {"date": pd.to_datetime(["2026-07-13"]), "close": [1.679]}
+        ),
+    )
+    monkeypatch.setattr(
+        market_data.ak,
+        "fund_etf_spot_em",
+        lambda: pd.DataFrame(
+            {"代码": ["512400"], "数据日期": [pd.Timestamp("2026-07-14")], "最新价": [1.774]}
+        ),
+    )
+
+    _name, prices = market_data.fetch_a_share("512400", "2026-07-14", "2026-07-14")
+
+    assert prices["date"].dt.strftime("%Y-%m-%d").tolist() == ["2026-07-14"]
+    assert prices["close"].tolist() == [1.774]
+
+
 def test_second_load_fetches_only_dates_after_cache(tmp_path):
     calls = []
 
