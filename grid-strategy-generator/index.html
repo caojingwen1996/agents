@@ -11,25 +11,126 @@
   /* GRID_CALCULATOR_START */
   (() => {
     const roundPrice = (value) => Math.round((value + Number.EPSILON) * 1000) / 1000;
+    const roundMoney = (value) => Math.round((value + Number.EPSILON) * 100) / 100;
+    const roundPct = (value) => Math.round((value + Number.EPSILON) * 100) / 100;
 
-    function calculateGrid(input) {
-      const stepRate = input.stepPct / 100;
-      const downwardSteps = Math.ceil(input.maxDropPct / input.stepPct - 1e-12);
-      const rawStep = input.startPrice * stepRate;
-      const levels = [];
-
-      for (let index = 0; index <= downwardSteps; index += 1) {
-        const buyPrice = roundPrice(input.startPrice - index * rawStep);
-        const sellPrice = index === 0
-          ? roundPrice(input.startPrice + rawStep)
-          : levels[index - 1].buyPrice;
-        levels.push({ index: index + 1, buyPrice, sellPrice });
+    function positiveNumber(value, label) {
+      const number = Number(value);
+      if (!Number.isFinite(number) || number <= 0) {
+        throw new Error(`${label}必须大于 0`);
       }
-
-      return { levels };
+      return number;
     }
 
-    window.GridCalculator = { calculateGrid, roundPrice };
+    function calculateGrid(input) {
+      const startPrice = positiveNumber(input.startPrice, "起始价");
+      const stepPct = positiveNumber(input.stepPct, "步长比例");
+      const maxDropPct = positiveNumber(input.maxDropPct, "最大跌幅");
+      const amount = positiveNumber(
+        input.amount,
+        input.fundingMode === "total" ? "总资金" : "每格金额",
+      );
+      const feePct = Number(input.feePct ?? 0);
+
+      if (!Number.isFinite(feePct) || feePct < 0) {
+        throw new Error("费率不能为负数");
+      }
+      if (stepPct >= 100 || maxDropPct >= 100) {
+        throw new Error("步长比例和最大跌幅必须小于 100%");
+      }
+      if (!["perGrid", "total"].includes(input.fundingMode)) {
+        throw new Error("请选择有效的资金模式");
+      }
+
+      const downwardSteps = Math.ceil(maxDropPct / stepPct - 1e-12);
+      const rawStep = startPrice * stepPct / 100;
+      if (startPrice - downwardSteps * rawStep <= 0) {
+        throw new Error("最低档价格必须大于 0");
+      }
+
+      const prices = Array.from(
+        { length: downwardSteps + 1 },
+        (_, index) => roundPrice(startPrice - index * rawStep),
+      );
+      if (prices.some((price, index) => index > 0 && price >= prices[index - 1])) {
+        throw new Error("价格步长在三位小数报价下过小");
+      }
+
+      const feeRate = feePct / 100;
+      const levelCount = prices.length;
+      const cashPerLevel = input.fundingMode === "total"
+        ? amount / levelCount
+        : amount * (1 + feeRate);
+      const securityBudget = input.fundingMode === "total"
+        ? cashPerLevel / (1 + feeRate)
+        : amount;
+
+      const levels = prices.map((buyPrice, index) => {
+        const sellPrice = index === 0
+          ? roundPrice(startPrice + rawStep)
+          : prices[index - 1];
+        const quantity = Math.floor(securityBudget / buyPrice / 100) * 100;
+        if (quantity < 100) {
+          throw new Error("每格资金不足以至少买入 100 份");
+        }
+
+        const actualBuyAmount = roundMoney(quantity * buyPrice);
+        const sellAmount = roundMoney(quantity * sellPrice);
+        const buyFee = roundMoney(actualBuyAmount * feeRate);
+        const sellFee = roundMoney(sellAmount * feeRate);
+        const grossProfit = roundMoney(sellAmount - actualBuyAmount);
+        const netProfit = roundMoney(grossProfit - buyFee - sellFee);
+
+        return {
+          index: index + 1,
+          buyPrice,
+          sellPrice,
+          plannedBudget: roundMoney(securityBudget),
+          quantity,
+          actualBuyAmount,
+          sellAmount,
+          buyFee,
+          sellFee,
+          grossProfit,
+          netProfit,
+          netReturnPct: roundPct(netProfit / actualBuyAmount * 100),
+        };
+      });
+
+      const totalQuantity = levels.reduce((sum, row) => sum + row.quantity, 0);
+      const maxCashUsed = roundMoney(
+        levels.reduce((sum, row) => sum + row.actualBuyAmount + row.buyFee, 0),
+      );
+      const plannedCash = roundMoney(
+        input.fundingMode === "total" ? amount : cashPerLevel * levelCount,
+      );
+      const lowestPrice = levels.at(-1).buyPrice;
+      const marketValueAtBottom = roundMoney(totalQuantity * lowestPrice);
+      const unrealizedPnl = roundMoney(marketValueAtBottom - maxCashUsed);
+
+      return {
+        meta: {
+          rawStep: roundPrice(rawStep),
+          coveragePct: roundPct(downwardSteps * stepPct),
+          levelCount,
+          fundingMode: input.fundingMode,
+        },
+        levels,
+        pressure: {
+          plannedCash,
+          maxCashUsed,
+          unusedCash: roundMoney(plannedCash - maxCashUsed),
+          totalQuantity,
+          averageCost: roundPrice(maxCashUsed / totalQuantity),
+          lowestPrice,
+          marketValueAtBottom,
+          unrealizedPnl,
+          unrealizedPnlPct: roundPct(unrealizedPnl / maxCashUsed * 100),
+        },
+      };
+    }
+
+    window.GridCalculator = { calculateGrid, roundPrice, roundMoney, roundPct };
   })();
   /* GRID_CALCULATOR_END */
   </script>
