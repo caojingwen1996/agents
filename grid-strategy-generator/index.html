@@ -327,9 +327,13 @@
         input.fundingMode === "total" ? "总资金" : "每格金额",
       );
       const feePct = Number(input.feePct ?? 0);
+      const profitRetentionMultiple = Number(input.profitRetentionMultiple ?? 0);
 
       if (!Number.isFinite(feePct) || feePct < 0) {
         throw new Error("费率不能为负数");
+      }
+      if (![0, 1, 2, 3].includes(profitRetentionMultiple)) {
+        throw new Error("留利润策略必须为关闭、留 1 份、留 2 份或留 3 份");
       }
       if (stepPct >= 100 || maxDropPct >= 100) {
         throw new Error("步长比例和最大跌幅必须小于 100%");
@@ -377,11 +381,31 @@
         }
 
         const actualBuyAmount = roundMoney(quantity * buyPrice);
-        const sellAmount = roundMoney(quantity * sellPrice);
+        const fullSellAmount = roundMoney(quantity * sellPrice);
+        const fullGrossProfit = roundMoney(fullSellAmount - actualBuyAmount);
+        const targetSellProceeds = profitRetentionMultiple === 0
+          ? fullSellAmount
+          : Math.max(
+            0,
+            actualBuyAmount - (profitRetentionMultiple - 1) * fullGrossProfit,
+          );
+        const sellQuantity = profitRetentionMultiple === 0
+          ? quantity
+          : Math.min(
+            quantity,
+            targetSellProceeds <= 0
+              ? 0
+              : Math.ceil(targetSellProceeds / sellPrice / 100 - 1e-12) * 100,
+          );
+        const retainedQuantity = quantity - sellQuantity;
+        const sellAmount = roundMoney(sellQuantity * sellPrice);
+        const retainedMarketValue = roundMoney(retainedQuantity * sellPrice);
         const buyFee = roundMoney(actualBuyAmount * feeRate);
         const sellFee = roundMoney(sellAmount * feeRate);
-        const grossProfit = roundMoney(sellAmount - actualBuyAmount);
-        const netProfit = roundMoney(grossProfit - buyFee - sellFee);
+        const cashPnl = roundMoney(sellAmount - actualBuyAmount - buyFee - sellFee);
+        const combinedProfit = roundMoney(cashPnl + retainedMarketValue);
+        const grossProfit = fullGrossProfit;
+        const netProfit = profitRetentionMultiple === 0 ? cashPnl : combinedProfit;
 
         return {
           index: index + 1,
@@ -390,15 +414,32 @@
           plannedBudget: roundMoney(securityBudget),
           quantity,
           actualBuyAmount,
+          fullSellAmount,
+          sellQuantity,
           sellAmount,
+          retainedQuantity,
+          retainedMarketValue,
           buyFee,
           sellFee,
           grossProfit,
           netProfit,
+          cashPnl,
+          combinedProfit,
           netReturnPct: roundPct(netProfit / actualBuyAmount * 100),
         };
       });
 
+      const completion = {
+        totalSellProceeds: roundMoney(levels.reduce((sum, row) => sum + row.sellAmount, 0)),
+        totalRetainedQuantity: levels.reduce((sum, row) => sum + row.retainedQuantity, 0),
+        totalRetainedMarketValue: roundMoney(
+          levels.reduce((sum, row) => sum + row.retainedMarketValue, 0),
+        ),
+        totalCashPnl: roundMoney(levels.reduce((sum, row) => sum + row.cashPnl, 0)),
+        totalCombinedProfit: roundMoney(
+          levels.reduce((sum, row) => sum + row.combinedProfit, 0),
+        ),
+      };
       const totalQuantity = levels.reduce((sum, row) => sum + row.quantity, 0);
       const maxCashUsed = roundMoney(
         levels.reduce((sum, row) => sum + row.actualBuyAmount + row.buyFee, 0),
@@ -417,8 +458,10 @@
           coveragePct: roundPct(downwardSteps * stepPct),
           levelCount,
           fundingMode: input.fundingMode,
+          profitRetentionMultiple,
         },
         levels,
+        completion,
         pressure: {
           plannedSecurityPrincipal,
           plannedCash,
