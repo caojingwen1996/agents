@@ -167,3 +167,49 @@ test("contains the agreed offline form and result regions", () => {
   }
   assert.doesNotMatch(html, /\bfetch\s*\(/);
 });
+
+test("rejects a positive raw price that rounds to a zero-priced order", () => {
+  const { calculateGrid } = loadCalculator();
+  assert.throws(
+    () => calculateGrid({
+      startPrice: 0.002,
+      stepPct: 40,
+      maxDropPct: 50,
+      fundingMode: "perGrid",
+      amount: 1_000,
+      feePct: 0,
+    }),
+    /取整后必须大于 0/,
+  );
+});
+
+test("rejects plans that exceed the safe grid-count limit", () => {
+  const { calculateGrid } = loadCalculator();
+  assert.throws(
+    () => calculateGrid({
+      startPrice: 1_000,
+      stepPct: 0.1,
+      maxDropPct: 50.1,
+      fundingMode: "perGrid",
+      amount: 1_000_000,
+      feePct: 0,
+    }),
+    /不能超过 500 档/,
+  );
+});
+
+test("reports securities principal separately from fee-inclusive cash", () => {
+  const { calculateGrid } = loadCalculator();
+  const result = calculateGrid({
+    startPrice: 1,
+    stepPct: 5,
+    maxDropPct: 30,
+    fundingMode: "perGrid",
+    amount: 10_000,
+    feePct: 0.03,
+  });
+
+  assert.equal(result.pressure.plannedSecurityPrincipal, 70_000);
+  assert.ok(result.pressure.plannedCash > result.pressure.plannedSecurityPrincipal);
+  assert.match(fs.readFileSync(htmlPath, "utf8"), /证券本金预算/);
+});
