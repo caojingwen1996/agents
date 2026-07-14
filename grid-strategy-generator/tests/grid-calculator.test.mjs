@@ -264,3 +264,13 @@ test("escapes CSV cells and creates a safe timestamped filename", () => {
     "中证-500-ETF-网格策略-20260714-090807.csv",
   );
 });
+
+test("contains an offline CSV export action and latest-plan snapshot", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+
+  assert.match(html, /id=["']export-csv-button["']/);
+  assert.match(html, /let latestPlan = null/);
+  assert.match(html, /new Blob\(\[csv\], \{ type: "text\/csv;charset=utf-8" \}\)/);
+  assert.match(html, /URL\.revokeObjectURL/);
+  assert.doesNotMatch(html, /\bfetch\s*\(/);
+});
