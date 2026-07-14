@@ -98,6 +98,25 @@ def test_second_load_fetches_only_dates_after_cache(tmp_path):
     assert result.as_of_date.isoformat() == "2025-01-03"
 
 
+def test_load_backfills_dates_before_existing_cache(tmp_path):
+    calls = []
+
+    def fetcher(code, start_date, end_date):
+        calls.append((code, start_date, end_date))
+        return "平安银行", pd.DataFrame(
+            {"date": pd.to_datetime([start_date]), "close": [10.0]}
+        )
+
+    repository = MarketDataRepository(tmp_path, fetcher)
+    repository.load("000001", "2025-01-03", "2025-01-03")
+    repository.load("000001", "2025-01-01", "2025-01-03")
+
+    assert calls == [
+        ("000001", "2025-01-03", "2025-01-03"),
+        ("000001", "2025-01-01", "2025-01-02"),
+    ]
+
+
 def test_fetch_failure_returns_existing_cache_with_warning(tmp_path):
     repository = MarketDataRepository(
         tmp_path,

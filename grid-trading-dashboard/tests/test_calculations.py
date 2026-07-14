@@ -119,6 +119,30 @@ def test_weekend_trade_marker_moves_to_next_market_day():
     assert report.metrics.position_percentage == Decimal("0.011")
 
 
+def test_chart_keeps_one_month_of_prices_before_first_buy_as_baseline():
+    data = workbook(
+        trade(date(2025, 2, 15), "买入", "G1", "100", "10"),
+    )
+
+    report = calculate_report(
+        data,
+        prices(
+            ("2025-01-14", 9),
+            ("2025-01-15", 9.5),
+            ("2025-01-31", 10),
+            ("2025-02-15", 11),
+        ),
+        "平安银行",
+    )
+
+    assert [point.date for point in report.price_points] == [
+        date(2025, 1, 15),
+        date(2025, 1, 31),
+        date(2025, 2, 15),
+    ]
+    assert [point.date for point in report.cost_points] == [date(2025, 2, 15)]
+
+
 def test_dividend_contributes_to_xirr_and_repeat_cycle_count():
     data = workbook(
         trade(date(2024, 1, 2), "买入", "G1", "100", "10"),

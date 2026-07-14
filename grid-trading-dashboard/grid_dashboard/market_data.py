@@ -167,18 +167,26 @@ class MarketDataRepository:
         cached = self._read_cache(price_path)
         name = self._read_name(metadata_path, stock_code)
 
-        fetch_start = requested_start
-        if not cached.empty:
-            cache_end = cached["date"].iloc[-1].date()
-            fetch_start = max(requested_start, cache_end + timedelta(days=1))
-
         warning = None
-        if fetch_start <= requested_end:
+        if cached.empty:
+            fetch_ranges = [(requested_start, requested_end)]
+        else:
+            cache_start = cached["date"].iloc[0].date()
+            cache_end = cached["date"].iloc[-1].date()
+            fetch_ranges = []
+            if requested_start < cache_start:
+                fetch_ranges.append(
+                    (requested_start, min(requested_end, cache_start - timedelta(days=1)))
+                )
+            if cache_end < requested_end:
+                fetch_ranges.append((max(requested_start, cache_end + timedelta(days=1)), requested_end))
+
+        for fetch_start, fetch_end in fetch_ranges:
             try:
                 fetched_name, fetched = self.fetcher(
                     stock_code,
                     fetch_start.isoformat(),
-                    requested_end.isoformat(),
+                    fetch_end.isoformat(),
                 )
                 incoming = _normalize(fetched)
                 name = fetched_name or name
@@ -202,6 +210,7 @@ class MarketDataRepository:
                     ) from exc
                 as_of = cached["date"].iloc[-1].date()
                 warning = f"行情获取失败，当前行情截至 {as_of.isoformat()}"
+                break
 
         if cached.empty:
             raise MarketDataError(f"无法获取 {stock_code} 行情：没有可用数据")
