@@ -114,7 +114,7 @@ def test_market_warning_is_attached_to_report(tmp_path):
     assert result["warning"] == "行情已缓存"
 
 
-def test_market_load_starts_one_calendar_month_before_first_buy(tmp_path):
+def test_market_load_starts_on_first_day_of_buy_year(tmp_path):
     repository = StubMarketRepository()
     service = DashboardService(
         tmp_path / "交易记录.xlsx",
@@ -126,4 +126,4 @@ def test_market_load_starts_one_calendar_month_before_first_buy(tmp_path):
 
     service.refresh()
 
-    assert repository.calls == [("000001", "2024-12-02", "2025-01-03")]
+    assert repository.calls == [("000001", "2025-01-01", "2025-01-03")]

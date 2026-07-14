@@ -153,7 +153,7 @@ def _build_chart(
     first_price: Decimal,
 ):
     first_buy_date = next(trade.trade_date for trade in workbook.trades if trade.kind == "买入")
-    baseline_date = (pd.Timestamp(first_buy_date) - pd.DateOffset(months=1)).date()
+    baseline_date = date(first_buy_date.year, 1, 1)
     visible_rows = [row for row in market_rows if row[0] >= baseline_date]
     if not visible_rows:
         raise CalculationError("首笔买入日之后没有可用行情")

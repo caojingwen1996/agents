@@ -119,7 +119,7 @@ def test_weekend_trade_marker_moves_to_next_market_day():
     assert report.metrics.position_percentage == Decimal("0.011")
 
 
-def test_chart_keeps_one_month_of_prices_before_first_buy_as_baseline():
+def test_chart_keeps_buy_year_prices_before_first_buy_as_baseline():
     data = workbook(
         trade(date(2025, 2, 15), "买入", "G1", "100", "10"),
     )
@@ -127,6 +127,8 @@ def test_chart_keeps_one_month_of_prices_before_first_buy_as_baseline():
     report = calculate_report(
         data,
         prices(
+            ("2024-12-31", 8.5),
+            ("2025-01-01", 9),
             ("2025-01-14", 9),
             ("2025-01-15", 9.5),
             ("2025-01-31", 10),
@@ -136,6 +138,8 @@ def test_chart_keeps_one_month_of_prices_before_first_buy_as_baseline():
     )
 
     assert [point.date for point in report.price_points] == [
+        date(2025, 1, 1),
+        date(2025, 1, 14),
         date(2025, 1, 15),
         date(2025, 1, 31),
         date(2025, 2, 15),
