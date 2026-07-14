@@ -147,3 +147,23 @@ test("rejects invalid values, unaffordable lots, and duplicate rounded prices", 
     /最低档价格必须大于 0/,
   );
 });
+
+test("contains the agreed offline form and result regions", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  for (const id of [
+    "grid-form",
+    "symbol-name",
+    "start-price",
+    "step-pct",
+    "max-drop-pct",
+    "funding-mode",
+    "funding-amount",
+    "fee-pct",
+    "error-message",
+    "pressure-summary",
+    "grid-table-body",
+  ]) {
+    assert.match(html, new RegExp(`id=["']${id}["']`));
+  }
+  assert.doesNotMatch(html, /\bfetch\s*\(/);
+});
