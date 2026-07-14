@@ -43,6 +43,13 @@ def _tencent_symbol(stock_code: str) -> str:
 def fetch_a_share(stock_code: str, start_date: str, end_date: str):
     compact_start = start_date.replace("-", "")
     compact_end = end_date.replace("-", "")
+    if stock_code.startswith("5"):
+        frame = ak.fund_etf_hist_sina(symbol=_tencent_symbol(stock_code))
+        dates = pd.to_datetime(frame["date"], errors="coerce")
+        frame = frame.loc[
+            (dates >= pd.Timestamp(start_date)) & (dates <= pd.Timestamp(end_date))
+        ].copy()
+        return stock_code, frame
     try:
         frame = ak.stock_zh_a_hist(
             symbol=stock_code,
