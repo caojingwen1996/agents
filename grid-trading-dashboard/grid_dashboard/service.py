@@ -1,10 +1,16 @@
-from datetime import date, timedelta
+from calendar import monthrange
+from datetime import date
 from pathlib import Path
 from typing import Callable
 
 from .calculations import calculate_report
 from .errors import MarketDataError
 from .excel_io import load_workbook
+
+
+def _one_calendar_month_before(day: date) -> date:
+    year, month = (day.year - 1, 12) if day.month == 1 else (day.year, day.month - 1)
+    return date(year, month, min(day.day, monthrange(year, month)[1]))
 
 
 class DashboardService:
@@ -41,7 +47,7 @@ class DashboardService:
         latest_trade_date = max(trade.trade_date for trade in workbook.trades)
         market = self.market_repository.load(
             workbook.settings.stock_code,
-            (first_buy_date - timedelta(days=1)).isoformat(),
+            _one_calendar_month_before(first_buy_date).isoformat(),
             self.today().isoformat(),
         )
         if market.as_of_date < latest_trade_date:
