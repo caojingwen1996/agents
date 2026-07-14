@@ -20,6 +20,18 @@ function loadCalculator() {
   return context.window.GridCalculator;
 }
 
+function loadExporter() {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  const match = html.match(
+    /\/\* GRID_EXPORT_START \*\/([\s\S]*?)\/\* GRID_EXPORT_END \*\//,
+  );
+  assert.ok(match, "export block must be present");
+  const context = { window: {} };
+  vm.createContext(context);
+  vm.runInContext(match[1], context);
+  return context.window.GridExporter;
+}
+
 test("reproduces the article's arithmetic price grid", () => {
   const { calculateGrid } = loadCalculator();
   const result = calculateGrid({
@@ -216,4 +228,39 @@ test("reports securities principal separately from fee-inclusive cash", () => {
 
 test("labels the bottom-price scenario as total holding market value", () => {
   assert.match(fs.readFileSync(htmlPath, "utf8"), /最低档情景-持仓总市值/);
+});
+
+test("serializes a complete grid plan as Excel-friendly CSV", () => {
+  const { buildGridCsv } = loadExporter();
+  const { calculateGrid } = loadCalculator();
+  const input = {
+    startPrice: 1,
+    stepPct: 5,
+    maxDropPct: 5,
+    fundingMode: "perGrid",
+    amount: 10_000,
+    feePct: 0.1,
+  };
+  const csv = buildGridCsv(input, calculateGrid(input));
+
+  assert.equal(csv.charCodeAt(0), 0xFEFF);
+  assert.match(csv, /输入参数,数值\r\n起始价格,1\.000/);
+  assert.match(csv, /资金模式,固定每格金额/);
+  assert.match(csv, /压力测试,数值/);
+  assert.match(csv, /最低档情景-持仓总市值/);
+  assert.match(csv, /序号,档位,买入价格,卖出价格,买入数量,买入金额,卖出数量,卖出金额,盈利金额,盈利比例/);
+  assert.match(csv, /1,1\.000,1\.000,1\.050,10000,10000\.00,10000,10500\.00,479\.50,4\.80%/);
+});
+
+test("escapes CSV cells and creates a safe timestamped filename", () => {
+  const { serializeCsv, createExportFilename } = loadExporter();
+
+  assert.equal(
+    serializeCsv([["名称", "含,逗号"], ["说明", "有\"引号\""]]),
+    "\uFEFF名称,\"含,逗号\"\r\n说明,\"有\"\"引号\"\"\"",
+  );
+  assert.equal(
+    createExportFilename("  中证/500:ETF  ", new Date(2026, 6, 14, 9, 8, 7)),
+    "中证-500-ETF-网格策略-20260714-090807.csv",
+  );
 });

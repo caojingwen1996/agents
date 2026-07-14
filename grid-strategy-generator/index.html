@@ -427,6 +427,100 @@
   /* GRID_CALCULATOR_END */
   </script>
   <script>
+  /* GRID_EXPORT_START */
+  (() => {
+    function escapeCsvCell(value) {
+      const text = String(value ?? "");
+      return /[",\r\n]/.test(text)
+        ? `"${text.replaceAll('"', '""')}"`
+        : text;
+    }
+
+    function serializeCsv(rows) {
+      return `\uFEFF${rows.map((row) => row.map(escapeCsvCell).join(",")).join("\r\n")}`;
+    }
+
+    function formatTimestamp(date) {
+      const pad = (value) => String(value).padStart(2, "0");
+      return [
+        date.getFullYear(),
+        pad(date.getMonth() + 1),
+        pad(date.getDate()),
+        "-",
+        pad(date.getHours()),
+        pad(date.getMinutes()),
+        pad(date.getSeconds()),
+      ].join("");
+    }
+
+    function sanitizeFilenamePart(value) {
+      return String(value ?? "")
+        .trim()
+        .replace(/[\\/:*?"<>|]+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/[. ]+$/g, "");
+    }
+
+    function createExportFilename(symbol, date = new Date()) {
+      return `${sanitizeFilenamePart(symbol)}-网格策略-${formatTimestamp(date)}.csv`;
+    }
+
+    function buildGridCsv(input, result) {
+      const fundingModeLabel = input.fundingMode === "total" ? "限定总资金" : "固定每格金额";
+      const fundingLabel = input.fundingMode === "total" ? "总资金（元）" : "每格金额（元）";
+      const rows = [
+        ["输入参数", "数值"],
+        ["起始价格", Number(input.startPrice).toFixed(3)],
+        ["步长比例", `${Number(input.stepPct).toFixed(2)}%`],
+        ["最大跌幅", `${Number(input.maxDropPct).toFixed(2)}%`],
+        ["资金模式", fundingModeLabel],
+        [fundingLabel, Number(input.amount).toFixed(2)],
+        ["单边费率", `${Number(input.feePct).toFixed(3)}%`],
+        [],
+        ["压力测试", "数值"],
+        ["实际价格步长", result.meta.rawStep.toFixed(3)],
+        ["覆盖跌幅", `${result.meta.coveragePct.toFixed(2)}%`],
+        ["网格档数", result.meta.levelCount],
+        ["证券本金预算", result.pressure.plannedSecurityPrincipal.toFixed(2)],
+        ["计划现金", result.pressure.plannedCash.toFixed(2)],
+        ["最大实际投入", result.pressure.maxCashUsed.toFixed(2)],
+        ["未使用现金", result.pressure.unusedCash.toFixed(2)],
+        ["总持仓", result.pressure.totalQuantity],
+        ["平均成本", result.pressure.averageCost.toFixed(3)],
+        ["最低买入价", result.pressure.lowestPrice.toFixed(3)],
+        ["最低档情景-持仓总市值", result.pressure.marketValueAtBottom.toFixed(2)],
+        ["最低档浮亏", result.pressure.unrealizedPnl.toFixed(2)],
+        ["最低档浮亏比例", `${result.pressure.unrealizedPnlPct.toFixed(2)}%`],
+        [],
+        ["序号", "档位", "买入价格", "卖出价格", "买入数量", "买入金额", "卖出数量", "卖出金额", "盈利金额", "盈利比例"],
+        ...result.levels.map((row) => [
+          row.index,
+          row.buyPrice.toFixed(3),
+          row.buyPrice.toFixed(3),
+          row.sellPrice.toFixed(3),
+          row.quantity,
+          row.actualBuyAmount.toFixed(2),
+          row.quantity,
+          row.sellAmount.toFixed(2),
+          row.netProfit.toFixed(2),
+          `${row.netReturnPct.toFixed(2)}%`,
+        ]),
+      ];
+      return serializeCsv(rows);
+    }
+
+    window.GridExporter = {
+      buildGridCsv,
+      createExportFilename,
+      escapeCsvCell,
+      formatTimestamp,
+      sanitizeFilenamePart,
+      serializeCsv,
+    };
+  })();
+  /* GRID_EXPORT_END */
+  </script>
+  <script>
     const byId = (id) => document.getElementById(id);
     const money = new Intl.NumberFormat("zh-CN", {
       minimumFractionDigits: 2,
