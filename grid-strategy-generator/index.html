@@ -620,6 +620,113 @@
   /* GRID_EXPORT_END */
   </script>
   <script>
+  /* GRID_STRATEGY_STORE_START */
+  (() => {
+    const STORE_VERSION = 1;
+    const ALLOWED_FUNDING_MODES = new Set(["total", "perGrid"]);
+    const ALLOWED_RETENTION_MULTIPLES = new Set([0, 1, 2, 3]);
+
+    function normalizeInput(input) {
+      const normalized = {
+        startPrice: String(input?.startPrice ?? ""),
+        stepPct: String(input?.stepPct ?? ""),
+        maxDropPct: String(input?.maxDropPct ?? ""),
+        fundingMode: String(input?.fundingMode ?? ""),
+        amount: String(input?.amount ?? ""),
+        feePct: String(input?.feePct ?? "0"),
+        profitRetentionMultiple: Number(input?.profitRetentionMultiple),
+      };
+      if (
+        !normalized.startPrice
+        || !normalized.stepPct
+        || !normalized.maxDropPct
+        || !normalized.amount
+        || !ALLOWED_FUNDING_MODES.has(normalized.fundingMode)
+        || !ALLOWED_RETENTION_MULTIPLES.has(normalized.profitRetentionMultiple)
+      ) {
+        throw new Error("保存的策略参数无效");
+      }
+      return normalized;
+    }
+
+    function createRecord(symbol, input, savedAt = new Date()) {
+      const normalizedSymbol = String(symbol ?? "").trim();
+      if (!normalizedSymbol) throw new Error("标的名称不能为空");
+      const isoTime = savedAt instanceof Date
+        ? savedAt.toISOString()
+        : new Date(savedAt).toISOString();
+      return {
+        version: STORE_VERSION,
+        symbol: normalizedSymbol,
+        savedAt: isoTime,
+        input: normalizeInput(input),
+      };
+    }
+
+    function normalizeRecord(record) {
+      if (record?.version !== STORE_VERSION) throw new Error("保存记录版本无效");
+      return createRecord(record.symbol, record.input, record.savedAt);
+    }
+
+    function sortNewestFirst(records) {
+      return [...records].sort((left, right) => right.savedAt.localeCompare(left.savedAt));
+    }
+
+    function upsertRecord(records, record) {
+      const normalized = normalizeRecord(record);
+      return sortNewestFirst([
+        ...records.filter((item) => item.symbol !== normalized.symbol),
+        normalized,
+      ]);
+    }
+
+    function removeRecord(records, symbol) {
+      const normalizedSymbol = String(symbol ?? "").trim();
+      return records.filter((record) => record.symbol !== normalizedSymbol);
+    }
+
+    function parseStore(raw) {
+      if (!raw) return { records: [], skippedCount: 0 };
+      let envelope;
+      try {
+        envelope = JSON.parse(raw);
+      } catch {
+        return { records: [], skippedCount: 1 };
+      }
+      if (envelope?.version !== STORE_VERSION || !Array.isArray(envelope.records)) {
+        return { records: [], skippedCount: 1 };
+      }
+      const records = [];
+      let skippedCount = 0;
+      for (const candidate of envelope.records) {
+        try {
+          const record = normalizeRecord(candidate);
+          const existingIndex = records.findIndex((item) => item.symbol === record.symbol);
+          if (existingIndex >= 0) records.splice(existingIndex, 1);
+          records.push(record);
+        } catch {
+          skippedCount += 1;
+        }
+      }
+      return { records: sortNewestFirst(records), skippedCount };
+    }
+
+    function serializeStore(records) {
+      return JSON.stringify({ version: STORE_VERSION, records: records.map(normalizeRecord) });
+    }
+
+    window.GridStrategyStore = {
+      STORE_VERSION,
+      createRecord,
+      parseStore,
+      removeRecord,
+      serializeStore,
+      upsertRecord,
+    };
+  })();
+  /* GRID_STRATEGY_STORE_END */
+  </script>
+  <script>
     const byId = (id) => document.getElementById(id);
     const money = new Intl.NumberFormat("zh-CN", {
       minimumFractionDigits: 2,
