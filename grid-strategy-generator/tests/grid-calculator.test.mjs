@@ -516,3 +516,19 @@ test("exports retention settings, completion summary, and retained rows", () => 
   assert.match(csv, /序号,档位,买入价格,卖出价格,买入数量,买入金额,卖出数量,卖出回款,留存数量,留存市值,现金盈亏,综合利润/);
   assert.match(csv, /1,1\.000,1\.000,1\.050,10000,10000\.00,9100,9555\.00,900,945\.00,-445\.00,500\.00/);
 });
+
+test("contains a responsive saved-strategy sidebar and save feedback", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  for (const id of [
+    "saved-strategy-list",
+    "saved-strategy-empty",
+    "save-strategy-button",
+    "save-status",
+    "tool-column",
+  ]) {
+    assert.match(html, new RegExp(`id=["']${id}["']`));
+  }
+  assert.match(html, /class=["'][^"']*app-layout/);
+  assert.match(html, /aria-live=["']polite["']/);
+  assert.match(html, /@media \(max-width: 900px\)/);
+});
