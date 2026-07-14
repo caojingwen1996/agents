@@ -275,6 +275,7 @@ def calculate_report(
         xirr=_calculate_xirr(cash_flows),
         current_change=latest_close / first_buy.price - 1,
         max_decline_from_build=min(visible_closes) / first_buy.price - 1,
+        decline_from_all_time_high=latest_close / max(close for _, close in market_rows) - 1,
         withdrawal_count=withdrawal_count,
         position_percentage=current_value / workbook.settings.strategy_budget,
         running_days=(latest_date - first_buy.trade_date).days,
