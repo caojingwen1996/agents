@@ -49,6 +49,24 @@ def fetch_a_share(stock_code: str, start_date: str, end_date: str):
         frame = frame.loc[
             (dates >= pd.Timestamp(start_date)) & (dates <= pd.Timestamp(end_date))
         ].copy()
+        latest_daily_date = pd.to_datetime(frame["date"], errors="coerce").max()
+        if pd.notna(latest_daily_date) and latest_daily_date < pd.Timestamp(end_date):
+            try:
+                spot = ak.fund_etf_spot_em()
+                code_column = spot["代码"].astype(str).str.zfill(6)
+                row = spot.loc[code_column == stock_code].iloc[0]
+                spot_date = pd.to_datetime(row["数据日期"], errors="coerce")
+                spot_price = pd.to_numeric(row["最新价"], errors="coerce")
+                if pd.notna(spot_date) and pd.notna(spot_price) and spot_date <= pd.Timestamp(end_date):
+                    frame = pd.concat(
+                        [
+                            frame,
+                            pd.DataFrame({"date": [spot_date], "close": [spot_price]}),
+                        ],
+                        ignore_index=True,
+                    )
+            except Exception:
+                pass
         return stock_code, frame
     try:
         frame = ak.stock_zh_a_hist(
