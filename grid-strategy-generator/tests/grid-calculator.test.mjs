@@ -387,3 +387,18 @@ test("summarizes one completed round without changing pressure results", () => {
   assert.equal(plain.levels[0].retainedQuantity, 0);
   assert.equal(plain.levels[0].netProfit, 500);
 });
+
+test("contains profit-retention controls and completion summary", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+
+  for (const id of [
+    "profit-retention",
+    "completion-panel",
+    "completion-summary",
+    "grid-table-head",
+  ]) {
+    assert.match(html, new RegExp(`id=["']${id}["']`));
+  }
+  assert.match(html, /每档完成一轮后/);
+  assert.match(html, /综合利润未扣除留存份额未来卖出费用/);
+});
