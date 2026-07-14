@@ -530,6 +530,11 @@
     function buildGridCsv(input, result) {
       const fundingModeLabel = input.fundingMode === "total" ? "限定总资金" : "固定每格金额";
       const fundingLabel = input.fundingMode === "total" ? "总资金（元）" : "每格金额（元）";
+      const retentionMultiple = Number(input.profitRetentionMultiple ?? 0);
+      const retentionLabel = retentionMultiple === 0
+        ? "关闭（网格 1.0）"
+        : `留 ${retentionMultiple} 份利润`;
+      const retentionEnabled = retentionMultiple > 0;
       const rows = [
         ["输入参数", "数值"],
         ["起始价格", Number(input.startPrice).toFixed(3)],
@@ -538,6 +543,7 @@
         ["资金模式", fundingModeLabel],
         [fundingLabel, Number(input.amount).toFixed(2)],
         ["单边费率", `${Number(input.feePct).toFixed(3)}%`],
+        ["留利润策略", retentionLabel],
         [],
         ["压力测试", "数值"],
         ["实际价格步长", result.meta.rawStep.toFixed(3)],
@@ -553,21 +559,52 @@
         ["最低档情景-持仓总市值", result.pressure.marketValueAtBottom.toFixed(2)],
         ["最低档浮亏", result.pressure.unrealizedPnl.toFixed(2)],
         ["最低档浮亏比例", `${result.pressure.unrealizedPnlPct.toFixed(2)}%`],
-        [],
-        ["序号", "档位", "买入价格", "卖出价格", "买入数量", "买入金额", "卖出数量", "卖出金额", "盈利金额", "盈利比例"],
-        ...result.levels.map((row) => [
-          row.index,
-          row.buyPrice.toFixed(3),
-          row.buyPrice.toFixed(3),
-          row.sellPrice.toFixed(3),
-          row.quantity,
-          row.actualBuyAmount.toFixed(2),
-          row.quantity,
-          row.sellAmount.toFixed(2),
-          row.netProfit.toFixed(2),
-          `${row.netReturnPct.toFixed(2)}%`,
-        ]),
       ];
+
+      if (retentionEnabled) {
+        rows.push(
+          [],
+          ["每档完成一轮后", "数值"],
+          ["累计卖出回款", result.completion.totalSellProceeds.toFixed(2)],
+          ["累计留存份额", result.completion.totalRetainedQuantity],
+          ["累计留存市值", result.completion.totalRetainedMarketValue.toFixed(2)],
+          ["累计现金盈亏", result.completion.totalCashPnl.toFixed(2)],
+          ["累计综合利润", result.completion.totalCombinedProfit.toFixed(2)],
+          [],
+          ["序号", "档位", "买入价格", "卖出价格", "买入数量", "买入金额", "卖出数量", "卖出回款", "留存数量", "留存市值", "现金盈亏", "综合利润"],
+          ...result.levels.map((row) => [
+            row.index,
+            row.buyPrice.toFixed(3),
+            row.buyPrice.toFixed(3),
+            row.sellPrice.toFixed(3),
+            row.quantity,
+            row.actualBuyAmount.toFixed(2),
+            row.sellQuantity,
+            row.sellAmount.toFixed(2),
+            row.retainedQuantity,
+            row.retainedMarketValue.toFixed(2),
+            row.cashPnl.toFixed(2),
+            row.combinedProfit.toFixed(2),
+          ]),
+        );
+      } else {
+        rows.push(
+          [],
+          ["序号", "档位", "买入价格", "卖出价格", "买入数量", "买入金额", "卖出数量", "卖出金额", "盈利金额", "盈利比例"],
+          ...result.levels.map((row) => [
+            row.index,
+            row.buyPrice.toFixed(3),
+            row.buyPrice.toFixed(3),
+            row.sellPrice.toFixed(3),
+            row.quantity,
+            row.actualBuyAmount.toFixed(2),
+            row.quantity,
+            row.sellAmount.toFixed(2),
+            row.netProfit.toFixed(2),
+            `${row.netReturnPct.toFixed(2)}%`,
+          ]),
+        );
+      }
       return serializeCsv(rows);
     }
 
