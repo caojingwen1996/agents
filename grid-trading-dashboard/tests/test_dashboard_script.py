@@ -1,7 +1,11 @@
 import subprocess
 from pathlib import Path
 
+import pytest
+from shutil import which
 
+
+@pytest.mark.skipif(which("node") is None, reason="Node.js is not installed")
 def test_script_keeps_refresh_available_when_old_page_has_no_position_selector():
     script = Path(__file__).resolve().parents[1] / "static" / "dashboard.js"
     harness = r'''
@@ -45,3 +49,11 @@ require(process.argv[1]);
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_script_offsets_same_day_trade_markers_and_formats_axis_dates():
+    script = Path(__file__).resolve().parents[1] / "static" / "dashboard.js"
+    source = script.read_text(encoding="utf-8")
+
+    assert 'kind === "买入" ? "06:00:00" : "18:00:00"' in source
+    assert 'formatter: formatAxisDate' in source

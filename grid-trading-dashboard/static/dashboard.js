@@ -106,11 +106,23 @@
     });
   }
 
+  function markerTimestamp(chartDate, kind) {
+    return `${chartDate}T${kind === "买入" ? "06:00:00" : "18:00:00"}`;
+  }
+
+  function formatAxisDate(value) {
+    const day = new Date(value);
+    if (Number.isNaN(day.getTime())) return String(value).slice(0, 10);
+    const month = String(day.getMonth() + 1).padStart(2, "0");
+    const date = String(day.getDate()).padStart(2, "0");
+    return `${day.getFullYear()}-${month}-${date}`;
+  }
+
   function markerData(markers, kind) {
     return markers
       .filter((marker) => marker.kind === kind)
       .map((marker) => ({
-        value: [marker.chart_date, marker.value],
+        value: [markerTimestamp(marker.chart_date, kind), marker.value],
         trade: marker,
         label: { formatter: `${kind === "买入" ? "买" : "卖"} ${marker.grid_id}` },
       }));
@@ -119,7 +131,7 @@
   function tooltipFormatter(params) {
     const items = Array.isArray(params) ? params : [params];
     const date = items[0]?.axisValue || items[0]?.value?.[0] || "";
-    const lines = [`<strong>${escapeHtml(date)}</strong>`];
+    const lines = [`<strong>${escapeHtml(formatAxisDate(date))}</strong>`];
     items.forEach((item) => {
       if (item.data?.trade) {
         const trade = item.data.trade;
@@ -165,7 +177,12 @@
       xAxis: {
         type: "time",
         axisLine: { lineStyle: { color: "#7a818d" } },
-        axisLabel: { color: "#bac0ca", rotate: 42, hideOverlap: true },
+        axisLabel: {
+          color: "#bac0ca",
+          rotate: 42,
+          hideOverlap: true,
+          formatter: formatAxisDate,
+        },
         splitLine: { show: false },
       },
       yAxis: {
