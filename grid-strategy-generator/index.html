@@ -166,6 +166,7 @@
       background: var(--accent-soft);
       box-shadow: inset 3px 0 0 var(--accent);
     }
+    .strategy-item.is-active .strategy-load strong { font-weight: 800; }
     .strategy-load, .strategy-delete {
       min-height: 52px;
       border: 0;
@@ -721,11 +722,24 @@
         feePct: String(input?.feePct ?? "0"),
         profitRetentionMultiple: Number(input?.profitRetentionMultiple),
       };
+      const startPrice = Number(normalized.startPrice);
+      const stepPct = Number(normalized.stepPct);
+      const maxDropPct = Number(normalized.maxDropPct);
+      const amount = Number(normalized.amount);
+      const feePct = Number(normalized.feePct);
       if (
-        !normalized.startPrice
-        || !normalized.stepPct
-        || !normalized.maxDropPct
-        || !normalized.amount
+        !Number.isFinite(startPrice)
+        || startPrice <= 0
+        || !Number.isFinite(stepPct)
+        || stepPct <= 0
+        || stepPct >= 100
+        || !Number.isFinite(maxDropPct)
+        || maxDropPct <= 0
+        || maxDropPct >= 100
+        || !Number.isFinite(amount)
+        || amount <= 0
+        || !Number.isFinite(feePct)
+        || feePct < 0
         || !ALLOWED_FUNDING_MODES.has(normalized.fundingMode)
         || !ALLOWED_RETENTION_MULTIPLES.has(normalized.profitRetentionMultiple)
       ) {

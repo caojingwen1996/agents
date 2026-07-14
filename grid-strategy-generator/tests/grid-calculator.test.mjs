@@ -109,9 +109,16 @@ test("parses valid saved records while skipping damaged data", () => {
   });
   assert.deepEqual(JSON.parse(JSON.stringify(parseStore(JSON.stringify({
     version: 1,
-    records: [good, { ...good, symbol: "" }],
+    records: [
+      good,
+      { ...good, symbol: "" },
+      { ...good, symbol: "bad-price", input: { ...good.input, startPrice: "garbage" } },
+      { ...good, symbol: "bad-step", input: { ...good.input, stepPct: "999" } },
+      { ...good, symbol: "bad-amount", input: { ...good.input, amount: "-1" } },
+      { ...good, symbol: "bad-fee", input: { ...good.input, feePct: "not-a-number" } },
+    ],
   })))), {
-    records: [good], skippedCount: 1,
+    records: [good], skippedCount: 5,
   });
 });
 
@@ -531,6 +538,7 @@ test("contains a responsive saved-strategy sidebar and save feedback", () => {
   assert.match(html, /class=["'][^"']*app-layout/);
   assert.match(html, /aria-live=["']polite["']/);
   assert.match(html, /@media \(max-width: 900px\)/);
+  assert.match(html, /\.strategy-item\.is-active \.strategy-load strong\s*{[^}]*font-weight:\s*800/);
 });
 
 test("wires local save, reload, overwrite, and confirmed delete behavior", () => {
