@@ -147,6 +147,25 @@ def test_chart_keeps_buy_year_prices_before_first_buy_as_baseline():
     assert [point.date for point in report.cost_points] == [date(2025, 2, 15)]
 
 
+def test_metrics_reports_decline_from_all_time_high():
+    data = workbook(
+        trade(date(2025, 2, 15), "买入", "G1", "100", "10"),
+    )
+
+    report = calculate_report(
+        data,
+        prices(
+            ("2020-01-02", 20),
+            ("2025-01-01", 9),
+            ("2025-02-15", 10),
+            ("2025-03-01", 15),
+        ),
+        "平安银行",
+    )
+
+    assert report.metrics.decline_from_all_time_high == Decimal("-0.25")
+
+
 def test_dividend_contributes_to_xirr_and_repeat_cycle_count():
     data = workbook(
         trade(date(2024, 1, 2), "买入", "G1", "100", "10"),

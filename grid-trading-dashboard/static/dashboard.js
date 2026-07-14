@@ -20,6 +20,7 @@
     ["XIRR年化", "xirr", "percent", true],
     ["现距建仓涨跌", "current_change", "percent", true],
     ["距建仓最大跌幅", "max_decline_from_build", "percent", true],
+    ["距历史最高跌幅", "decline_from_all_time_high", "percent", true],
     ["提款次数", "withdrawal_count", "count", false],
     ["单品仓位", "position_percentage", "percent", false],
     ["运行天数", "running_days", "days", false],

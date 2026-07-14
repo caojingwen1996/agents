@@ -69,6 +69,7 @@ class Metrics:
     xirr: Decimal | None
     current_change: Decimal
     max_decline_from_build: Decimal
+    decline_from_all_time_high: Decimal
     withdrawal_count: int
     position_percentage: Decimal
     running_days: int

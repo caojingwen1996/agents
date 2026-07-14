@@ -45,7 +45,7 @@ class DashboardService:
         latest_trade_date = max(trade.trade_date for trade in workbook.trades)
         market = self.market_repository.load(
             workbook.settings.stock_code,
-            _start_of_buy_year(first_buy_date).isoformat(),
+            date(1900, 1, 1).isoformat(),
             self.today().isoformat(),
         )
         if market.as_of_date < latest_trade_date:
