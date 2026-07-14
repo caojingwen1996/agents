@@ -249,6 +249,15 @@
             <input id="fee-pct" type="number" min="0" step="0.001" inputmode="decimal" value="0">
             <span class="helper">买入和卖出分别计算一次</span>
           </label>
+          <label for="profit-retention">留利润策略
+            <select id="profit-retention">
+              <option value="0" selected>关闭（网格 1.0）</option>
+              <option value="1">留 1 份利润</option>
+              <option value="2">留 2 份利润</option>
+              <option value="3">留 3 份利润</option>
+            </select>
+            <span class="helper">按税费前利润计算留存，费用另外计入盈亏</span>
+          </label>
         </div>
         <div class="step-presets" aria-label="步长快捷值">
           <button class="preset-button" type="button" data-step="5">普通 5%</button>
@@ -268,6 +277,15 @@
         <div id="pressure-summary" class="metric-grid"></div>
       </section>
 
+      <section id="completion-panel" class="panel" aria-labelledby="completion-title" hidden>
+        <div class="section-heading">
+          <h2 id="completion-title">3. 每档完成一轮后</h2>
+          <p>各档分别完成一次买入和计划卖出</p>
+        </div>
+        <div id="completion-summary" class="metric-grid"></div>
+        <p class="note">综合利润未扣除留存份额未来卖出费用。</p>
+      </section>
+
       <section class="panel table-panel" aria-labelledby="table-title">
         <div class="section-heading">
           <h2 id="table-title">3. 网格计划</h2>
@@ -280,18 +298,7 @@
         <div class="table-scroll">
           <table>
             <thead>
-              <tr>
-                <th scope="col">档位</th>
-                <th scope="col">买入价</th>
-                <th scope="col">卖出价</th>
-                <th scope="col">计划预算</th>
-                <th scope="col">数量</th>
-                <th scope="col">实际买入金额</th>
-                <th scope="col">卖出金额</th>
-                <th scope="col">税费前利润</th>
-                <th scope="col">税费后利润</th>
-                <th scope="col">净收益率</th>
-              </tr>
+              <tr id="grid-table-head"></tr>
             </thead>
             <tbody id="grid-table-body"></tbody>
           </table>
@@ -327,9 +334,13 @@
         input.fundingMode === "total" ? "总资金" : "每格金额",
       );
       const feePct = Number(input.feePct ?? 0);
+      const profitRetentionMultiple = Number(input.profitRetentionMultiple ?? 0);
 
       if (!Number.isFinite(feePct) || feePct < 0) {
         throw new Error("费率不能为负数");
+      }
+      if (![0, 1, 2, 3].includes(profitRetentionMultiple)) {
+        throw new Error("留利润策略必须为关闭、留 1 份、留 2 份或留 3 份");
       }
       if (stepPct >= 100 || maxDropPct >= 100) {
         throw new Error("步长比例和最大跌幅必须小于 100%");
@@ -377,11 +388,31 @@
         }
 
         const actualBuyAmount = roundMoney(quantity * buyPrice);
-        const sellAmount = roundMoney(quantity * sellPrice);
+        const fullSellAmount = roundMoney(quantity * sellPrice);
+        const fullGrossProfit = roundMoney(fullSellAmount - actualBuyAmount);
+        const targetSellProceeds = profitRetentionMultiple === 0
+          ? fullSellAmount
+          : Math.max(
+            0,
+            actualBuyAmount - (profitRetentionMultiple - 1) * fullGrossProfit,
+          );
+        const sellQuantity = profitRetentionMultiple === 0
+          ? quantity
+          : Math.min(
+            quantity,
+            targetSellProceeds <= 0
+              ? 0
+              : Math.ceil(targetSellProceeds / sellPrice / 100 - 1e-12) * 100,
+          );
+        const retainedQuantity = quantity - sellQuantity;
+        const sellAmount = roundMoney(sellQuantity * sellPrice);
+        const retainedMarketValue = roundMoney(retainedQuantity * sellPrice);
         const buyFee = roundMoney(actualBuyAmount * feeRate);
         const sellFee = roundMoney(sellAmount * feeRate);
-        const grossProfit = roundMoney(sellAmount - actualBuyAmount);
-        const netProfit = roundMoney(grossProfit - buyFee - sellFee);
+        const cashPnl = roundMoney(sellAmount - actualBuyAmount - buyFee - sellFee);
+        const combinedProfit = roundMoney(cashPnl + retainedMarketValue);
+        const grossProfit = fullGrossProfit;
+        const netProfit = profitRetentionMultiple === 0 ? cashPnl : combinedProfit;
 
         return {
           index: index + 1,
@@ -390,15 +421,32 @@
           plannedBudget: roundMoney(securityBudget),
           quantity,
           actualBuyAmount,
+          fullSellAmount,
+          sellQuantity,
           sellAmount,
+          retainedQuantity,
+          retainedMarketValue,
           buyFee,
           sellFee,
           grossProfit,
           netProfit,
+          cashPnl,
+          combinedProfit,
           netReturnPct: roundPct(netProfit / actualBuyAmount * 100),
         };
       });
 
+      const completion = {
+        totalSellProceeds: roundMoney(levels.reduce((sum, row) => sum + row.sellAmount, 0)),
+        totalRetainedQuantity: levels.reduce((sum, row) => sum + row.retainedQuantity, 0),
+        totalRetainedMarketValue: roundMoney(
+          levels.reduce((sum, row) => sum + row.retainedMarketValue, 0),
+        ),
+        totalCashPnl: roundMoney(levels.reduce((sum, row) => sum + row.cashPnl, 0)),
+        totalCombinedProfit: roundMoney(
+          levels.reduce((sum, row) => sum + row.combinedProfit, 0),
+        ),
+      };
       const totalQuantity = levels.reduce((sum, row) => sum + row.quantity, 0);
       const maxCashUsed = roundMoney(
         levels.reduce((sum, row) => sum + row.actualBuyAmount + row.buyFee, 0),
@@ -417,8 +465,10 @@
           coveragePct: roundPct(downwardSteps * stepPct),
           levelCount,
           fundingMode: input.fundingMode,
+          profitRetentionMultiple,
         },
         levels,
+        completion,
         pressure: {
           plannedSecurityPrincipal,
           plannedCash,
@@ -480,6 +530,11 @@
     function buildGridCsv(input, result) {
       const fundingModeLabel = input.fundingMode === "total" ? "限定总资金" : "固定每格金额";
       const fundingLabel = input.fundingMode === "total" ? "总资金（元）" : "每格金额（元）";
+      const retentionMultiple = Number(input.profitRetentionMultiple ?? 0);
+      const retentionLabel = retentionMultiple === 0
+        ? "关闭（网格 1.0）"
+        : `留 ${retentionMultiple} 份利润`;
+      const retentionEnabled = retentionMultiple > 0;
       const rows = [
         ["输入参数", "数值"],
         ["起始价格", Number(input.startPrice).toFixed(3)],
@@ -488,6 +543,7 @@
         ["资金模式", fundingModeLabel],
         [fundingLabel, Number(input.amount).toFixed(2)],
         ["单边费率", `${Number(input.feePct).toFixed(3)}%`],
+        ["留利润策略", retentionLabel],
         [],
         ["压力测试", "数值"],
         ["实际价格步长", result.meta.rawStep.toFixed(3)],
@@ -503,21 +559,52 @@
         ["最低档情景-持仓总市值", result.pressure.marketValueAtBottom.toFixed(2)],
         ["最低档浮亏", result.pressure.unrealizedPnl.toFixed(2)],
         ["最低档浮亏比例", `${result.pressure.unrealizedPnlPct.toFixed(2)}%`],
-        [],
-        ["序号", "档位", "买入价格", "卖出价格", "买入数量", "买入金额", "卖出数量", "卖出金额", "盈利金额", "盈利比例"],
-        ...result.levels.map((row) => [
-          row.index,
-          row.buyPrice.toFixed(3),
-          row.buyPrice.toFixed(3),
-          row.sellPrice.toFixed(3),
-          row.quantity,
-          row.actualBuyAmount.toFixed(2),
-          row.quantity,
-          row.sellAmount.toFixed(2),
-          row.netProfit.toFixed(2),
-          `${row.netReturnPct.toFixed(2)}%`,
-        ]),
       ];
+
+      if (retentionEnabled) {
+        rows.push(
+          [],
+          ["每档完成一轮后", "数值"],
+          ["累计卖出回款", result.completion.totalSellProceeds.toFixed(2)],
+          ["累计留存份额", result.completion.totalRetainedQuantity],
+          ["累计留存市值", result.completion.totalRetainedMarketValue.toFixed(2)],
+          ["累计现金盈亏", result.completion.totalCashPnl.toFixed(2)],
+          ["累计综合利润", result.completion.totalCombinedProfit.toFixed(2)],
+          [],
+          ["序号", "档位", "买入价格", "卖出价格", "买入数量", "买入金额", "卖出数量", "卖出回款", "留存数量", "留存市值", "现金盈亏", "综合利润"],
+          ...result.levels.map((row) => [
+            row.index,
+            row.buyPrice.toFixed(3),
+            row.buyPrice.toFixed(3),
+            row.sellPrice.toFixed(3),
+            row.quantity,
+            row.actualBuyAmount.toFixed(2),
+            row.sellQuantity,
+            row.sellAmount.toFixed(2),
+            row.retainedQuantity,
+            row.retainedMarketValue.toFixed(2),
+            row.cashPnl.toFixed(2),
+            row.combinedProfit.toFixed(2),
+          ]),
+        );
+      } else {
+        rows.push(
+          [],
+          ["序号", "档位", "买入价格", "卖出价格", "买入数量", "买入金额", "卖出数量", "卖出金额", "盈利金额", "盈利比例"],
+          ...result.levels.map((row) => [
+            row.index,
+            row.buyPrice.toFixed(3),
+            row.buyPrice.toFixed(3),
+            row.sellPrice.toFixed(3),
+            row.quantity,
+            row.actualBuyAmount.toFixed(2),
+            row.quantity,
+            row.sellAmount.toFixed(2),
+            row.netProfit.toFixed(2),
+            `${row.netReturnPct.toFixed(2)}%`,
+          ]),
+        );
+      }
       return serializeCsv(rows);
     }
 
@@ -573,27 +660,73 @@
         ),
       );
 
+      const retentionEnabled = result.meta.profitRetentionMultiple > 0;
+      const completionPanel = byId("completion-panel");
+      completionPanel.hidden = !retentionEnabled;
+      byId("completion-title").textContent = "3. 每档完成一轮后";
+      byId("table-title").textContent = retentionEnabled ? "4. 网格计划" : "3. 网格计划";
+
+      if (retentionEnabled) {
+        byId("completion-summary").replaceChildren(
+          metric("累计卖出回款", `¥${money.format(result.completion.totalSellProceeds)}`),
+          metric("累计留存份额", `${integer.format(result.completion.totalRetainedQuantity)} 份`),
+          metric("累计留存市值", `¥${money.format(result.completion.totalRetainedMarketValue)}`),
+          metric("累计现金盈亏", `¥${money.format(result.completion.totalCashPnl)}`),
+          metric("累计综合利润", `¥${money.format(result.completion.totalCombinedProfit)}`),
+        );
+      } else {
+        byId("completion-summary").replaceChildren();
+      }
+
+      const headers = retentionEnabled
+        ? ["档位", "买入价", "卖出价", "买入数量", "实际买入金额", "卖出数量", "卖出回款", "留存数量", "留存市值", "现金盈亏", "综合利润"]
+        : ["档位", "买入价", "卖出价", "计划预算", "数量", "实际买入金额", "卖出金额", "税费前利润", "税费后利润", "净收益率"];
+      byId("grid-table-head").replaceChildren(...headers.map((label) => {
+        const th = document.createElement("th");
+        th.scope = "col";
+        th.textContent = label;
+        return th;
+      }));
+
       const body = byId("grid-table-body");
       body.replaceChildren(...result.levels.map((row) => {
         const tr = document.createElement("tr");
-        const values = [
-          row.index,
-          row.buyPrice.toFixed(3),
-          row.sellPrice.toFixed(3),
-          money.format(row.plannedBudget),
-          integer.format(row.quantity),
-          money.format(row.actualBuyAmount),
-          money.format(row.sellAmount),
-          money.format(row.grossProfit),
-          money.format(row.netProfit),
-          `${row.netReturnPct.toFixed(2)}%`,
-        ];
+        const values = retentionEnabled
+          ? [
+            row.index,
+            row.buyPrice.toFixed(3),
+            row.sellPrice.toFixed(3),
+            integer.format(row.quantity),
+            money.format(row.actualBuyAmount),
+            integer.format(row.sellQuantity),
+            money.format(row.sellAmount),
+            integer.format(row.retainedQuantity),
+            money.format(row.retainedMarketValue),
+            money.format(row.cashPnl),
+            money.format(row.combinedProfit),
+          ]
+          : [
+            row.index,
+            row.buyPrice.toFixed(3),
+            row.sellPrice.toFixed(3),
+            money.format(row.plannedBudget),
+            integer.format(row.quantity),
+            money.format(row.actualBuyAmount),
+            money.format(row.sellAmount),
+            money.format(row.grossProfit),
+            money.format(row.netProfit),
+            `${row.netReturnPct.toFixed(2)}%`,
+          ];
+        const profitIndexes = retentionEnabled ? [9, 10] : [8, 9];
 
         values.forEach((value, index) => {
           const td = document.createElement("td");
           td.textContent = value;
-          if (index === 8 || index === 9) {
-            td.className = row.netProfit >= 0 ? "positive" : "negative";
+          if (profitIndexes.includes(index)) {
+            const profit = retentionEnabled
+              ? (index === 9 ? row.cashPnl : row.combinedProfit)
+              : row.netProfit;
+            td.className = profit >= 0 ? "positive" : "negative";
           }
           tr.append(td);
         });
@@ -630,6 +763,7 @@
           fundingMode: byId("funding-mode").value,
           amount: byId("funding-amount").value,
           feePct: byId("fee-pct").value || 0,
+          profitRetentionMultiple: Number(byId("profit-retention").value),
         };
         const result = window.GridCalculator.calculateGrid(input);
         latestPlan = { input: { ...input }, result };

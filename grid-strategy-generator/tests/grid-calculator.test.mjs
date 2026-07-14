@@ -274,3 +274,152 @@ test("contains an offline CSV export action and latest-plan snapshot", () => {
   assert.match(html, /URL\.revokeObjectURL/);
   assert.doesNotMatch(html, /\bfetch\s*\(/);
 });
+
+test("retains one, two, or three profit portions in 100-share lots", () => {
+  const { calculateGrid } = loadCalculator();
+  const base = {
+    startPrice: 1,
+    stepPct: 5,
+    maxDropPct: 5,
+    fundingMode: "perGrid",
+    amount: 10_000,
+    feePct: 0,
+  };
+
+  const rows = [1, 2, 3].map((multiple) => calculateGrid({
+    ...base,
+    profitRetentionMultiple: multiple,
+  }).levels[0]);
+
+  assert.deepEqual(
+    Array.from(rows, (row) => [
+      row.sellQuantity,
+      row.retainedQuantity,
+      row.sellAmount,
+      row.retainedMarketValue,
+      row.cashPnl,
+      row.combinedProfit,
+    ]),
+    [
+      [9_600, 400, 10_080, 420, 80, 500],
+      [9_100, 900, 9_555, 945, -445, 500],
+      [8_600, 1_400, 9_030, 1_470, -970, 500],
+    ],
+  );
+});
+
+test("keeps retention quantities independent from fees", () => {
+  const { calculateGrid } = loadCalculator();
+  const row = calculateGrid({
+    startPrice: 1,
+    stepPct: 5,
+    maxDropPct: 5,
+    fundingMode: "perGrid",
+    amount: 10_000,
+    feePct: 0.1,
+    profitRetentionMultiple: 1,
+  }).levels[0];
+
+  assert.equal(row.sellQuantity, 9_600);
+  assert.equal(row.retainedQuantity, 400);
+  assert.equal(row.cashPnl, 59.92);
+  assert.equal(row.combinedProfit, 479.92);
+});
+
+test("handles zero retained shares, full retention, and invalid multiples", () => {
+  const { calculateGrid } = loadCalculator();
+  const base = {
+    startPrice: 1,
+    stepPct: 5,
+    maxDropPct: 5,
+    fundingMode: "perGrid",
+    amount: 100,
+    feePct: 0,
+  };
+
+  const noRemainder = calculateGrid({
+    ...base,
+    profitRetentionMultiple: 1,
+  }).levels[0];
+  assert.equal(noRemainder.sellQuantity, 100);
+  assert.equal(noRemainder.retainedQuantity, 0);
+
+  const fullRetention = calculateGrid({
+    ...base,
+    stepPct: 90,
+    maxDropPct: 90,
+    profitRetentionMultiple: 3,
+  }).levels[0];
+  assert.equal(fullRetention.sellQuantity, 0);
+  assert.equal(fullRetention.retainedQuantity, 100);
+
+  assert.throws(
+    () => calculateGrid({ ...base, profitRetentionMultiple: 4 }),
+    /留利润策略必须为/,
+  );
+});
+
+test("summarizes one completed round without changing pressure results", () => {
+  const { calculateGrid } = loadCalculator();
+  const base = {
+    startPrice: 1,
+    stepPct: 5,
+    maxDropPct: 10,
+    fundingMode: "perGrid",
+    amount: 10_000,
+    feePct: 0,
+  };
+  const plain = calculateGrid(base);
+  const retained = calculateGrid({ ...base, profitRetentionMultiple: 1 });
+
+  assert.equal(retained.pressure.maxCashUsed, plain.pressure.maxCashUsed);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(retained.completion)),
+    {
+      totalSellProceeds: retained.levels.reduce((sum, row) => sum + row.sellAmount, 0),
+      totalRetainedQuantity: retained.levels.reduce((sum, row) => sum + row.retainedQuantity, 0),
+      totalRetainedMarketValue: retained.levels.reduce((sum, row) => sum + row.retainedMarketValue, 0),
+      totalCashPnl: retained.levels.reduce((sum, row) => sum + row.cashPnl, 0),
+      totalCombinedProfit: retained.levels.reduce((sum, row) => sum + row.combinedProfit, 0),
+    },
+  );
+  assert.equal(plain.levels[0].sellQuantity, plain.levels[0].quantity);
+  assert.equal(plain.levels[0].retainedQuantity, 0);
+  assert.equal(plain.levels[0].netProfit, 500);
+});
+
+test("contains profit-retention controls and completion summary", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+
+  for (const id of [
+    "profit-retention",
+    "completion-panel",
+    "completion-summary",
+    "grid-table-head",
+  ]) {
+    assert.match(html, new RegExp(`id=["']${id}["']`));
+  }
+  assert.match(html, /每档完成一轮后/);
+  assert.match(html, /综合利润未扣除留存份额未来卖出费用/);
+});
+
+test("exports retention settings, completion summary, and retained rows", () => {
+  const { buildGridCsv } = loadExporter();
+  const { calculateGrid } = loadCalculator();
+  const input = {
+    startPrice: 1,
+    stepPct: 5,
+    maxDropPct: 5,
+    fundingMode: "perGrid",
+    amount: 10_000,
+    feePct: 0,
+    profitRetentionMultiple: 2,
+  };
+  const csv = buildGridCsv(input, calculateGrid(input));
+
+  assert.match(csv, /留利润策略,留 2 份利润/);
+  assert.match(csv, /每档完成一轮后,数值/);
+  assert.match(csv, /累计留存份额/);
+  assert.match(csv, /序号,档位,买入价格,卖出价格,买入数量,买入金额,卖出数量,卖出回款,留存数量,留存市值,现金盈亏,综合利润/);
+  assert.match(csv, /1,1\.000,1\.000,1\.050,10000,10000\.00,9100,9555\.00,900,945\.00,-445\.00,500\.00/);
+});
