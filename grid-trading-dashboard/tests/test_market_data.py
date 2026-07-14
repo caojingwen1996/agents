@@ -6,6 +6,10 @@ from grid_dashboard import market_data
 from grid_dashboard.market_data import MarketDataRepository
 
 
+def test_tencent_symbol_maps_shanghai_etf_to_sh_prefix():
+    assert market_data._tencent_symbol("512400") == "sh512400"
+
+
 def test_second_load_fetches_only_dates_after_cache(tmp_path):
     calls = []
 

@@ -33,7 +33,7 @@ def _extract_name(stock_code: str) -> str:
 
 
 def _tencent_symbol(stock_code: str) -> str:
-    if stock_code.startswith(("60", "68", "69")):
+    if stock_code.startswith(("5", "60", "68", "69")):
         return f"sh{stock_code}"
     if stock_code.startswith(("4", "8")):
         return f"bj{stock_code}"
