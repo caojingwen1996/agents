@@ -28,6 +28,7 @@
   ];
 
   const parseJson = (node) => {
+    if (!node) return null;
     try {
       return JSON.parse(node.textContent);
     } catch (_error) {
@@ -236,6 +237,7 @@
   }
 
   function renderPositions(positions = [], selectedFileId = null) {
+    if (!positionSelector) return;
     positionSelector.replaceChildren();
     positions.forEach((position) => {
       const option = document.createElement("option");
@@ -258,7 +260,9 @@
 
   function setLoading(isLoading) {
     refreshButton.disabled = isLoading;
-    positionSelector.disabled = isLoading || !positionSelector.options.length;
+    if (positionSelector) {
+      positionSelector.disabled = isLoading || !positionSelector.options.length;
+    }
     refreshButton.classList.toggle("is-loading", isLoading);
     refreshButton.querySelector(".refresh-label").textContent = isLoading ? "刷新中" : "刷新数据";
   }
@@ -282,7 +286,7 @@
   }
 
   refreshButton.addEventListener("click", refreshReport);
-  positionSelector.addEventListener("change", async () => {
+  positionSelector?.addEventListener("change", async () => {
     setLoading(true);
     try {
       const response = await fetch("/api/select-position", {
