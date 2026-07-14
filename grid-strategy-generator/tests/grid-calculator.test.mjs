@@ -213,3 +213,7 @@ test("reports securities principal separately from fee-inclusive cash", () => {
   assert.ok(result.pressure.plannedCash > result.pressure.plannedSecurityPrincipal);
   assert.match(fs.readFileSync(htmlPath, "utf8"), /证券本金预算/);
 });
+
+test("labels the bottom-price scenario as total holding market value", () => {
+  assert.match(fs.readFileSync(htmlPath, "utf8"), /最低档情景-持仓总市值/);
+});

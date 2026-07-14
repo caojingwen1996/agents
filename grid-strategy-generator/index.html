@@ -458,7 +458,7 @@
         metric("总持仓", `${integer.format(result.pressure.totalQuantity)} 份`),
         metric("平均成本", result.pressure.averageCost.toFixed(3)),
         metric("最低买入价", result.pressure.lowestPrice.toFixed(3)),
-        metric("最低档市值", `¥${money.format(result.pressure.marketValueAtBottom)}`),
+          metric("最低档情景-持仓总市值", `¥${money.format(result.pressure.marketValueAtBottom)}`),
         metric(
           "最低档浮亏",
           `¥${money.format(result.pressure.unrealizedPnl)} (${result.pressure.unrealizedPnlPct.toFixed(2)}%)`,
