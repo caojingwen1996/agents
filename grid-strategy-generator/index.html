@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>网格策略 1.0 计划生成器</title>
+</head>
+<body>
+  <main><h1>网格策略 1.0 计划生成器</h1></main>
+  <script>
+  /* GRID_CALCULATOR_START */
+  (() => {
+    const roundPrice = (value) => Math.round((value + Number.EPSILON) * 1000) / 1000;
+
+    function calculateGrid(input) {
+      const stepRate = input.stepPct / 100;
+      const downwardSteps = Math.ceil(input.maxDropPct / input.stepPct - 1e-12);
+      const rawStep = input.startPrice * stepRate;
+      const levels = [];
+
+      for (let index = 0; index <= downwardSteps; index += 1) {
+        const buyPrice = roundPrice(input.startPrice - index * rawStep);
+        const sellPrice = index === 0
+          ? roundPrice(input.startPrice + rawStep)
+          : levels[index - 1].buyPrice;
+        levels.push({ index: index + 1, buyPrice, sellPrice });
+      }
+
+      return { levels };
+    }
+
+    window.GridCalculator = { calculateGrid, roundPrice };
+  })();
+  /* GRID_CALCULATOR_END */
+  </script>
+</body>
+</html>
