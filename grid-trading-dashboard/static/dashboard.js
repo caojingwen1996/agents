@@ -3,8 +3,10 @@
 
   const byId = (id) => document.getElementById(id);
   const reportNode = byId("initial-report");
+  const stateNode = byId("initial-state");
   const errorNode = byId("initial-error");
   const refreshButton = byId("refresh-button");
+  const positionSelector = byId("position-selector");
   const statusMessage = byId("status-message");
   const chartElement = byId("performance-chart");
   const metricsPanel = byId("metrics-panel");
@@ -233,10 +235,36 @@
     else showStatus("");
   }
 
+  function renderPositions(positions = [], selectedFileId = null) {
+    positionSelector.replaceChildren();
+    positions.forEach((position) => {
+      const option = document.createElement("option");
+      option.value = position.file_id;
+      option.selected = position.file_id === selectedFileId;
+      option.disabled = Boolean(position.error);
+      option.textContent = position.error
+        ? `${position.file_id}（${position.error}）`
+        : `${position.stock_code} · ${position.display_name}`;
+      positionSelector.append(option);
+    });
+    positionSelector.disabled = !positions.some((position) => !position.error);
+  }
+
+  function renderState(state) {
+    if (!state) return;
+    renderPositions(state.positions, state.selected_file_id);
+    renderReport(state.report);
+  }
+
+  function setLoading(isLoading) {
+    refreshButton.disabled = isLoading;
+    positionSelector.disabled = isLoading || !positionSelector.options.length;
+    refreshButton.classList.toggle("is-loading", isLoading);
+    refreshButton.querySelector(".refresh-label").textContent = isLoading ? "刷新中" : "刷新数据";
+  }
+
   async function refreshReport() {
-    refreshButton.disabled = true;
-    refreshButton.classList.add("is-loading");
-    refreshButton.querySelector(".refresh-label").textContent = "刷新中";
+    setLoading(true);
     try {
       const response = await fetch("/api/refresh", { method: "POST" });
       const payload = await response.json();
@@ -244,26 +272,47 @@
         showStatus(payload.error || "刷新失败，请检查交易记录。", "error");
         return;
       }
-      renderReport(payload.report);
+      if (payload.report?.report) renderState(payload.report);
+      else renderReport(payload.report);
     } catch (error) {
       showStatus(`刷新失败：${error.message}`, "error");
     } finally {
-      refreshButton.disabled = false;
-      refreshButton.classList.remove("is-loading");
-      refreshButton.querySelector(".refresh-label").textContent = "刷新数据";
+      setLoading(false);
     }
   }
 
   refreshButton.addEventListener("click", refreshReport);
+  positionSelector.addEventListener("change", async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/select-position", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file_id: positionSelector.value }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        showStatus(payload.error || "切换标的失败", "error");
+        return;
+      }
+      renderState(payload);
+    } catch (error) {
+      showStatus(`切换标的失败：${error.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  });
   let resizeTimer;
   window.addEventListener("resize", () => {
     window.clearTimeout(resizeTimer);
     resizeTimer = window.setTimeout(() => chart?.resize(), 120);
   });
 
+  const initialState = parseJson(stateNode);
   const initialReport = parseJson(reportNode);
   const initialError = parseJson(errorNode);
-  if (initialReport) renderReport(initialReport);
+  if (initialState) renderState(initialState);
+  else if (initialReport) renderReport(initialReport);
   else renderMetrics({});
   if (initialError) showStatus(initialError, "error");
 })();

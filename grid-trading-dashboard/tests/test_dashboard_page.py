@@ -44,3 +44,10 @@ def test_dashboard_has_accessible_status_and_chart_summary():
     assert 'aria-label="刷新交易数据"' in html
     assert 'aria-describedby="chart-summary"' in html
     assert 'id="chart-summary"' in html
+
+
+def test_dashboard_contains_labeled_position_selector():
+    html = create_app(PageService()).test_client().get("/").get_data(as_text=True)
+
+    assert 'id="position-selector"' in html
+    assert '<label class="position-label" for="position-selector">' in html

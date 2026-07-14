@@ -94,4 +94,4 @@ def create_template(path: str | Path) -> None:
 
 
 if __name__ == "__main__":
-    create_template(Path(__file__).resolve().parents[1] / "data" / "交易记录.xlsx")
+    create_template(Path(__file__).resolve().parents[1] / "data" / "000001-平安银行.xlsx")

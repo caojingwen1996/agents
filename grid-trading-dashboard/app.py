@@ -4,6 +4,7 @@ import webbrowser
 
 from grid_dashboard.market_data import MarketDataRepository
 from grid_dashboard.service import DashboardService
+from grid_dashboard.position_service import PositionDashboardService
 from grid_dashboard.web import create_app
 
 
@@ -11,8 +12,13 @@ ROOT = Path(__file__).resolve().parent
 
 
 def build_app():
-    repository = MarketDataRepository(ROOT / "data" / "cache")
-    service = DashboardService(ROOT / "data" / "交易记录.xlsx", repository)
+    cache_dir = ROOT / "data" / "cache"
+    service = PositionDashboardService(
+        ROOT / "data",
+        service_factory=lambda workbook_path: DashboardService(
+            workbook_path, MarketDataRepository(cache_dir)
+        ),
+    )
     return create_app(service)
 
 
