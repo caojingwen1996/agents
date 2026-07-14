@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>网格交易收益仪表盘</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+</head>
+<body>
+  <a class="skip-link" href="#dashboard-main">跳到收益仪表盘</a>
+  <div class="app-shell">
+    <header class="toolbar">
+      <div>
+        <p class="eyebrow">LOCAL GRID PERFORMANCE</p>
+        <h1>网格交易收益仪表盘</h1>
+      </div>
+      <button id="refresh-button" class="refresh-button" type="button" aria-label="刷新交易数据">
+        <span class="refresh-icon" aria-hidden="true">↻</span>
+        <span class="refresh-label">刷新数据</span>
+      </button>
+    </header>
+
+    <div id="status-message" class="status-message" role="alert" aria-live="assertive" hidden></div>
+
+    <main id="dashboard-main" tabindex="-1">
+      <section class="dashboard-frame" aria-labelledby="chart-title">
+        <div class="hero-grid">
+          <div class="chart-panel">
+            <div class="chart-heading">
+              <h2 id="chart-title">等待交易数据</h2>
+              <p id="chart-subtitle">数据源：固定 Excel · 日线不复权</p>
+            </div>
+            <div
+              id="performance-chart"
+              class="performance-chart"
+              role="img"
+              aria-label="股票价格、持仓成本及网格买卖点走势图"
+              aria-describedby="chart-summary"
+            ></div>
+            <p id="chart-summary" class="sr-only">图表数据尚未加载。</p>
+          </div>
+          <aside id="metrics-panel" class="metrics-panel" aria-label="收益指标"></aside>
+        </div>
+      </section>
+
+      <section class="grid-section" aria-labelledby="grid-heading">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">GRID WITHDRAWALS</p>
+            <h2 id="grid-heading">各网格提款记录</h2>
+          </div>
+          <span id="market-as-of" class="as-of">行情日期 —</span>
+        </div>
+        <div class="table-wrap">
+          <table id="grid-summary">
+            <thead>
+              <tr>
+                <th scope="col">网格编号</th>
+                <th scope="col">完成次数</th>
+                <th scope="col">已卖数量</th>
+                <th scope="col">已实现净收益</th>
+                <th scope="col">单格收益率</th>
+                <th scope="col">平均持有天数</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script id="initial-report" type="application/json">{{ initial_report|tojson }}</script>
+  <script id="initial-error" type="application/json">{{ initial_error|tojson }}</script>
+  <script src="{{ url_for('static', filename='vendor/echarts.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+</body>
+</html>

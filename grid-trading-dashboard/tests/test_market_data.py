@@ -1,0 +1,88 @@
+import pandas as pd
+import pytest
+
+from grid_dashboard.errors import MarketDataError
+from grid_dashboard.market_data import MarketDataRepository
+
+
+def test_second_load_fetches_only_dates_after_cache(tmp_path):
+    calls = []
+
+    def fetcher(code, start_date, end_date):
+        calls.append((code, start_date, end_date))
+        return "平安银行", pd.DataFrame(
+            {"date": pd.to_datetime([start_date]), "close": [10.0]}
+        )
+
+    repository = MarketDataRepository(tmp_path, fetcher)
+
+    repository.load("000001", "2025-01-02", "2025-01-02")
+    result = repository.load("000001", "2025-01-02", "2025-01-03")
+
+    assert calls == [
+        ("000001", "2025-01-02", "2025-01-02"),
+        ("000001", "2025-01-03", "2025-01-03"),
+    ]
+    assert result.name == "平安银行"
+    assert result.as_of_date.isoformat() == "2025-01-03"
+
+
+def test_fetch_failure_returns_existing_cache_with_warning(tmp_path):
+    repository = MarketDataRepository(
+        tmp_path,
+        lambda *args: (
+            "平安银行",
+            pd.DataFrame(
+                {"date": pd.to_datetime(["2025-01-02"]), "close": [10.0]}
+            ),
+        ),
+    )
+    repository.load("000001", "2025-01-02", "2025-01-02")
+    repository.fetcher = lambda *args: (_ for _ in ()).throw(RuntimeError("offline"))
+
+    result = repository.load("000001", "2025-01-02", "2025-01-03")
+
+    assert result.warning == "行情获取失败，当前行情截至 2025-01-02"
+    assert result.as_of_date.isoformat() == "2025-01-02"
+
+
+def test_fetch_failure_without_cache_is_user_facing(tmp_path):
+    repository = MarketDataRepository(
+        tmp_path,
+        lambda *args: (_ for _ in ()).throw(RuntimeError("offline")),
+    )
+
+    with pytest.raises(MarketDataError, match="无法获取 000001 行情"):
+        repository.load("000001", "2025-01-02", "2025-01-03")
+
+
+def test_cache_merge_deduplicates_dates_and_keeps_latest_value(tmp_path):
+    responses = iter(
+        [
+            (
+                "平安银行",
+                pd.DataFrame(
+                    {"date": pd.to_datetime(["2025-01-02"]), "close": [10.0]}
+                ),
+            ),
+            (
+                "平安银行",
+                pd.DataFrame(
+                    {
+                        "date": pd.to_datetime(["2025-01-02", "2025-01-03"]),
+                        "close": [10.5, 11.0],
+                    }
+                ),
+            ),
+        ]
+    )
+    repository = MarketDataRepository(tmp_path, lambda *args: next(responses))
+    repository.load("000001", "2025-01-02", "2025-01-02")
+
+    result = repository.load("000001", "2025-01-02", "2025-01-03")
+
+    assert result.prices["date"].dt.strftime("%Y-%m-%d").tolist() == [
+        "2025-01-02",
+        "2025-01-03",
+    ]
+    assert result.prices["close"].tolist() == [10.5, 11.0]
