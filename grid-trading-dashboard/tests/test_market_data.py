@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 
 from grid_dashboard.errors import MarketDataError
+from grid_dashboard import market_data
 from grid_dashboard.market_data import MarketDataRepository
 
 
@@ -86,3 +87,33 @@ def test_cache_merge_deduplicates_dates_and_keeps_latest_value(tmp_path):
         "2025-01-03",
     ]
     assert result.prices["close"].tolist() == [10.5, 11.0]
+
+
+def test_default_fetcher_falls_back_to_tencent_when_eastmoney_fails(monkeypatch):
+    def unavailable(**_kwargs):
+        raise RuntimeError("eastmoney blocked")
+
+    calls = []
+
+    def tencent(**kwargs):
+        calls.append(kwargs)
+        return pd.DataFrame(
+            {"date": pd.to_datetime(["2025-01-02"]), "close": [10.0]}
+        )
+
+    monkeypatch.setattr(market_data.ak, "stock_zh_a_hist", unavailable)
+    monkeypatch.setattr(market_data.ak, "stock_zh_a_hist_tx", tencent)
+    monkeypatch.setattr(market_data, "_extract_name", lambda _code: "平安银行")
+
+    name, prices = market_data.fetch_a_share("000001", "2025-01-02", "2025-01-03")
+
+    assert name == "平安银行"
+    assert calls == [
+        {
+            "symbol": "sz000001",
+            "start_date": "20250102",
+            "end_date": "20250103",
+            "adjust": "",
+        }
+    ]
+    assert prices.columns.tolist() == ["date", "close"]

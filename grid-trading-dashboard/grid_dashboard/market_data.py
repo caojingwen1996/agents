@@ -32,14 +32,39 @@ def _extract_name(stock_code: str) -> str:
     return stock_code
 
 
+def _tencent_symbol(stock_code: str) -> str:
+    if stock_code.startswith(("60", "68", "69")):
+        return f"sh{stock_code}"
+    if stock_code.startswith(("4", "8")):
+        return f"bj{stock_code}"
+    return f"sz{stock_code}"
+
+
 def fetch_a_share(stock_code: str, start_date: str, end_date: str):
-    frame = ak.stock_zh_a_hist(
-        symbol=stock_code,
-        period="daily",
-        start_date=start_date.replace("-", ""),
-        end_date=end_date.replace("-", ""),
-        adjust="",
-    )
+    compact_start = start_date.replace("-", "")
+    compact_end = end_date.replace("-", "")
+    try:
+        frame = ak.stock_zh_a_hist(
+            symbol=stock_code,
+            period="daily",
+            start_date=compact_start,
+            end_date=compact_end,
+            adjust="",
+        )
+    except Exception as eastmoney_error:
+        try:
+            frame = ak.stock_zh_a_hist_tx(
+                symbol=_tencent_symbol(stock_code),
+                start_date=compact_start,
+                end_date=compact_end,
+                adjust="",
+            )
+        except Exception as tencent_error:
+            raise RuntimeError(
+                "东方财富和腾讯行情源均不可用："
+                f"东方财富={type(eastmoney_error).__name__}，"
+                f"腾讯={type(tencent_error).__name__}"
+            ) from tencent_error
     return _extract_name(stock_code), frame.rename(columns={"日期": "date", "收盘": "close"})
 
 
