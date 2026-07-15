@@ -212,6 +212,28 @@
     .save-status { margin: 8px 0 0; color: var(--muted); font-weight: 650; }
     .save-status.is-error { color: var(--loss); }
 
+    .valuation-panel { margin-top: 12px; padding: 14px 16px; }
+    .valuation-panel .section-heading { margin-bottom: 10px; }
+    .valuation-query {
+      display: grid;
+      grid-template-columns: minmax(220px, 320px) auto minmax(0, 1fr);
+      align-items: end;
+      gap: 10px;
+    }
+    .valuation-query input, .valuation-query button { min-height: 44px; }
+    .valuation-status { align-self: center; color: var(--muted); font-size: 0.86rem; }
+    .valuation-status.is-error { color: var(--loss); font-weight: 700; }
+    .valuation-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .valuation-grid .metric { padding: 9px 10px; border-radius: 10px; }
+    .valuation-grid .metric strong { margin-top: 2px; font-size: 0.95rem; }
+    .valuation-meta { margin: 8px 0 0; color: var(--muted); font-size: 0.8rem; }
+    .valuation-snapshot { color: #815b12; font-weight: 750; }
+
     .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
     .parameter-panel, .pressure-panel { margin-top: 12px; padding: 14px 16px; }
     .parameter-panel .section-heading, .pressure-panel .section-heading { margin-bottom: 10px; }
@@ -268,6 +290,7 @@
     @media (max-width: 1100px) {
       .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .pressure-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .valuation-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
 
     @media (max-width: 900px) {
@@ -292,6 +315,8 @@
       .section-heading { display: block; }
       .section-heading p { margin-top: 6px; }
       .plan-toolbar { align-items: stretch; flex-direction: column; }
+      .valuation-query { grid-template-columns: 1fr; align-items: stretch; }
+      .valuation-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -312,6 +337,22 @@
     <div class="app-layout">
       <div id="tool-column" class="tool-column">
 
+    <section id="valuation-panel" class="panel valuation-panel" aria-labelledby="valuation-title">
+      <div class="section-heading">
+        <h2 id="valuation-title">0. 估值辅助</h2>
+        <p>优先读取知行温度计，未收录时显示历史 PE/PB 分位</p>
+      </div>
+      <div class="valuation-query">
+        <label for="instrument-code">标的代码
+          <input id="instrument-code" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="off" placeholder="6 位 ETF 或指数代码">
+        </label>
+        <button id="valuation-retry" class="preset-button" type="button">重试</button>
+        <div id="valuation-status" class="valuation-status" aria-live="polite">请输入 6 位 ETF 或指数代码</div>
+      </div>
+      <div id="valuation-content" class="valuation-grid"></div>
+      <p id="valuation-meta" class="valuation-meta" hidden></p>
+    </section>
+
     <section class="panel parameter-panel" aria-labelledby="parameter-title">
       <div class="section-heading">
         <h2 id="parameter-title">1. 设置参数</h2>
@@ -319,9 +360,6 @@
       </div>
       <form id="grid-form" novalidate>
         <div class="form-grid">
-          <label for="symbol-name">标的名称
-            <input id="symbol-name" type="text" placeholder="例如：中证500 ETF" autocomplete="off">
-          </label>
           <label for="start-price">起始价（元）
             <input id="start-price" type="number" min="0" step="0.001" inputmode="decimal" placeholder="例如：1.000" required>
             <span class="helper">第一档买入价，也是计算固定步长的基准价</span>
@@ -406,7 +444,7 @@
       </section>
     </section>
 
-    <p class="disclaimer">本工具只按输入参数生成网格计划，不判断标的价值、未来走势或策略适用性，不构成投资建议。</p>
+    <p class="disclaimer">本工具只按输入参数生成网格计划。估值数据可能延迟，仅供信息参考；工具不判断标的未来走势或策略适用性，不构成投资建议。</p>
       </div>
       <aside class="panel strategy-sidebar" aria-labelledby="saved-strategy-title">
         <div class="section-heading strategy-heading">
@@ -734,6 +772,122 @@
   /* GRID_EXPORT_END */
   </script>
   <script>
+  /* GRID_VALUATION_START */
+  (() => {
+    function sanitizeCode(value) {
+      return String(value ?? "").replace(/\D/g, "").slice(0, 6);
+    }
+
+    function formatNumber(value, digits = 2) {
+      return Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : "--";
+    }
+
+    function formatPct(value) {
+      return Number.isFinite(Number(value)) ? `${Number(value).toFixed(2)}%` : "--";
+    }
+
+    function buildView(data) {
+      const trackedIndex = [data.trackedIndex?.code, data.trackedIndex?.name]
+        .filter(Boolean).join(" ");
+      const metrics = [
+        { label: "标的", value: [data.code, data.name].filter(Boolean).join(" ") },
+        { label: "跟踪指数", value: trackedIndex || "--" },
+      ];
+      if (data.thermometer) {
+        metrics.push(
+          { label: "指数温度", value: `${formatNumber(data.thermometer.temperature, 0)}°` },
+          { label: "估值区间", value: data.thermometer.valuationBand || "--" },
+          { label: "内在收益率", value: formatPct(data.thermometer.intrinsicReturnPct) },
+          { label: "股息率", value: formatPct(data.thermometer.dividendYieldPct) },
+        );
+      } else {
+        metrics.push(
+          { label: "当前 PE", value: formatNumber(data.percentiles?.pe?.currentValue) },
+          { label: "PE 历史分位", value: formatPct(data.percentiles?.pe?.percentilePct) },
+          { label: "当前 PB", value: formatNumber(data.percentiles?.pb?.currentValue) },
+          { label: "PB 历史分位", value: formatPct(data.percentiles?.pb?.percentilePct) },
+        );
+      }
+      return {
+        metrics,
+        sourceLabel: data.source === "youzhiyouxing" ? "知行温度计" : "历史 PE/PB 分位",
+        asOf: data.asOf || "--",
+        warnings: Array.isArray(data.warnings) ? data.warnings : [],
+        isSnapshot: Boolean(data.isSnapshot),
+      };
+    }
+
+    function createController({
+      fetchImpl = fetch,
+      onState = () => {},
+      debounceMs = 400,
+    } = {}) {
+      let timer = null;
+      let requestId = 0;
+      let abortController = null;
+      let lastCode = "";
+
+      function cancelPending() {
+        if (timer !== null) clearTimeout(timer);
+        timer = null;
+      }
+
+      async function query(rawCode) {
+        const code = sanitizeCode(rawCode);
+        if (code.length !== 6) {
+          onState({ kind: "empty", code });
+          return null;
+        }
+        lastCode = code;
+        const currentRequest = ++requestId;
+        abortController?.abort();
+        abortController = new AbortController();
+        onState({ kind: "loading", code });
+        try {
+          const response = await fetchImpl(`/api/valuation?code=${encodeURIComponent(code)}`, {
+            signal: abortController.signal,
+          });
+          const payload = await response.json();
+          if (currentRequest !== requestId) return null;
+          if (!response.ok) throw new Error(payload.error?.message || "估值数据暂不可用");
+          onState({ kind: "success", code, data: payload });
+          return payload;
+        } catch (error) {
+          if (error?.name !== "AbortError" && currentRequest === requestId) {
+            onState({ kind: "error", code, message: error.message || "估值数据暂不可用" });
+          }
+          return null;
+        }
+      }
+
+      function input(rawCode) {
+        const code = sanitizeCode(rawCode);
+        lastCode = code;
+        cancelPending();
+        if (code.length !== 6) {
+          requestId += 1;
+          abortController?.abort();
+          onState({ kind: "empty", code });
+          return;
+        }
+        timer = setTimeout(() => {
+          timer = null;
+          query(code);
+        }, debounceMs);
+      }
+
+      return {
+        input,
+        query,
+        retry: () => query(lastCode),
+      };
+    }
+
+    window.GridValuation = { buildView, createController, sanitizeCode };
+  })();
+  /* GRID_VALUATION_END */
+  </script>
+  <script>
   /* GRID_STRATEGY_STORE_START */
   (() => {
     const STORE_VERSION = 1;
@@ -866,7 +1020,6 @@
     });
     const STRATEGY_STORAGE_KEY = "grid-strategy-generator.saved-strategies.v1";
     const calculationFieldIds = new Set([
-      "symbol-name",
       "start-price",
       "step-pct",
       "max-drop-pct",
@@ -880,6 +1033,49 @@
     let savedStrategies = [];
     let activeSavedSymbol = null;
     let planIsCurrent = false;
+    let currentValuation = null;
+    let valuationController = null;
+
+    function renderValuationState(state) {
+      const status = byId("valuation-status");
+      const content = byId("valuation-content");
+      const meta = byId("valuation-meta");
+      const retry = byId("valuation-retry");
+      status.classList.toggle("is-error", state.kind === "error");
+      retry.disabled = state.kind === "loading";
+
+      if (state.kind === "empty") {
+        currentValuation = null;
+        status.textContent = "请输入 6 位 ETF 或指数代码";
+        content.replaceChildren();
+        meta.hidden = true;
+        return;
+      }
+      if (state.kind === "loading") {
+        status.textContent = `正在查询 ${state.code} 的估值数据…`;
+        return;
+      }
+      if (state.kind === "error") {
+        status.textContent = `${state.message}，可点击重试。`;
+        content.replaceChildren();
+        meta.hidden = true;
+        return;
+      }
+
+      currentValuation = { ...state.data, isSnapshot: false };
+      const view = window.GridValuation.buildView(currentValuation);
+      status.textContent = `已更新：${state.data.code} ${state.data.name || ""}`.trim();
+      content.replaceChildren(...view.metrics.map((item) => metric(item.label, item.value)));
+      const warnings = view.warnings.map((warning) => warning.message).filter(Boolean);
+      meta.textContent = [
+        `来源：${view.sourceLabel}`,
+        `数据日期：${view.asOf}`,
+        state.data.cached ? "一小时缓存结果" : "本次查询结果",
+        ...warnings,
+      ].join(" · ");
+      meta.classList.toggle("valuation-snapshot", view.isSnapshot);
+      meta.hidden = false;
+    }
 
     function setSaveStatus(message, isError = false) {
       const status = byId("save-status");
@@ -965,7 +1161,7 @@
     }
 
     function loadStrategy(record) {
-      byId("symbol-name").value = record.symbol;
+      byId("instrument-code").value = /^\d{6}$/.test(record.symbol) ? record.symbol : "";
       byId("start-price").value = record.input.startPrice;
       byId("step-pct").value = record.input.stepPct;
       byId("max-drop-pct").value = record.input.maxDropPct;
@@ -1106,10 +1302,25 @@
         return tr;
       }));
 
-      const symbol = byId("symbol-name").value.trim();
-      byId("plan-title").textContent = symbol ? `标的：${symbol}` : "未填写标的名称";
+      const code = byId("instrument-code").value.trim();
+      const resolvedName = currentValuation?.code === code ? currentValuation.name : "";
+      byId("plan-title").textContent = code
+        ? `标的：${[code, resolvedName].filter(Boolean).join(" ")}`
+        : "未填写标的代码";
       byId("results").hidden = false;
     }
+
+    valuationController = window.GridValuation.createController({
+      onState: renderValuationState,
+    });
+    byId("instrument-code").addEventListener("input", (event) => {
+      const code = window.GridValuation.sanitizeCode(event.target.value);
+      event.target.value = code;
+      activeSavedSymbol = null;
+      renderSavedStrategies();
+      valuationController.input(code);
+    });
+    byId("valuation-retry").addEventListener("click", () => valuationController.retry());
 
     byId("funding-mode").addEventListener("change", updateFundingLabel);
 
@@ -1126,10 +1337,6 @@
         if (!calculationFieldIds.has(event.target.id)) return;
         setPlanCurrent(false);
         setSaveStatus(latestPlan ? "参数已修改，请重新生成后再保存。" : "");
-        if (event.target.id === "symbol-name") {
-          activeSavedSymbol = null;
-          renderSavedStrategies();
-        }
       });
     }
 
@@ -1165,11 +1372,11 @@
     byId("export-csv-button").addEventListener("click", () => {
       if (!latestPlan) return;
 
-      const symbolInput = byId("symbol-name");
+      const symbolInput = byId("instrument-code");
       const symbol = symbolInput.value.trim();
       const errorBox = byId("error-message");
       if (!symbol) {
-        errorBox.textContent = "请先填写标的名称。";
+        errorBox.textContent = "请先填写 6 位标的代码。";
         errorBox.hidden = false;
         symbolInput.focus();
         return;
@@ -1180,10 +1387,10 @@
     });
 
     saveStrategyButton.addEventListener("click", () => {
-      const symbolInput = byId("symbol-name");
+      const symbolInput = byId("instrument-code");
       const symbol = symbolInput.value.trim();
       if (!symbol) {
-        setSaveStatus("请填写标的名称并重新生成网格计划。", true);
+        setSaveStatus("请填写 6 位标的代码并重新生成网格计划。", true);
         symbolInput.focus();
         return;
       }
@@ -1231,6 +1438,7 @@
       }
     });
 
+    renderValuationState({ kind: "empty", code: "" });
     loadSavedStrategies();
   </script>
 </body>

@@ -44,6 +44,24 @@ function loadStrategyStore() {
   return context.window.GridStrategyStore;
 }
 
+function loadValuation(overrides = {}) {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  const match = html.match(
+    /\/\* GRID_VALUATION_START \*\/([\s\S]*?)\/\* GRID_VALUATION_END \*\//,
+  );
+  assert.ok(match, "valuation block must be present");
+  const context = {
+    window: {},
+    AbortController: globalThis.AbortController,
+    setTimeout,
+    clearTimeout,
+    ...overrides,
+  };
+  vm.createContext(context);
+  vm.runInContext(match[1], context);
+  return context.window.GridValuation;
+}
+
 test("creates normalized versioned strategy records", () => {
   const { createRecord } = loadStrategyStore();
   const record = createRecord("  159198 港芯  ", {
@@ -260,11 +278,11 @@ test("rejects invalid values, unaffordable lots, and duplicate rounded prices", 
   );
 });
 
-test("contains the agreed offline form and result regions", () => {
+test("contains the agreed local form and result regions", () => {
   const html = fs.readFileSync(htmlPath, "utf8");
   for (const id of [
     "grid-form",
-    "symbol-name",
+    "instrument-code",
     "start-price",
     "step-pct",
     "max-drop-pct",
@@ -277,7 +295,7 @@ test("contains the agreed offline form and result regions", () => {
   ]) {
     assert.match(html, new RegExp(`id=["']${id}["']`));
   }
-  assert.doesNotMatch(html, /\bfetch\s*\(/);
+  assert.match(html, /fetchImpl\(`\/api\/valuation\?code=/);
 });
 
 test("rejects a positive raw price that rounds to a zero-priced order", () => {
@@ -614,4 +632,104 @@ test("wires local save, reload, overwrite, and confirmed delete behavior", () =>
   assert.match(html, /GridStrategyStore\.removeRecord/);
   assert.match(html, /GridExporter\.buildGridCsv/);
   assert.match(html, /saveStrategyButton\.disabled = !planIsCurrent/);
+});
+
+test("places a compact non-advisory valuation panel before parameters", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  const valuation = html.indexOf('id="valuation-panel"');
+  const parameters = html.indexOf('id="parameter-title"');
+
+  assert.ok(valuation > 0 && valuation < parameters);
+  assert.match(html, /id="instrument-code"[^>]*inputmode="numeric"[^>]*maxlength="6"/);
+  assert.match(html, /id="valuation-status"[^>]*aria-live="polite"/);
+  assert.match(html, /id="valuation-retry"/);
+  assert.match(html, /\.valuation-query[\s\S]*min-height:\s*44px/);
+  assert.match(html, /@media \(max-width: 720px\)[\s\S]*?\.valuation-query[^}]*grid-template-columns:\s*1fr/);
+  assert.doesNotMatch(html, /建议开启|暂不建议|信号不一致|可考虑开启/);
+  assert.doesNotMatch(html, /id="symbol-name"/);
+});
+
+test("sanitizes valuation codes and schedules only complete codes", () => {
+  const timers = [];
+  const valuation = loadValuation({
+    setTimeout: (callback, delay) => {
+      timers.push({ callback, delay });
+      return timers.length;
+    },
+    clearTimeout: () => {},
+  });
+  const states = [];
+  const controller = valuation.createController({
+    fetchImpl: async () => ({ ok: true, json: async () => ({ code: "510500" }) }),
+    onState: (state) => states.push(state),
+  });
+
+  assert.equal(valuation.sanitizeCode("51a05-00"), "510500");
+  controller.input("51050");
+  assert.equal(timers.length, 0);
+  assert.equal(states.at(-1).kind, "empty");
+  controller.input("510500");
+  assert.equal(timers.length, 1);
+  assert.equal(timers[0].delay, 400);
+});
+
+test("ignores stale valuation responses when a newer code wins", async () => {
+  const requests = [];
+  const fetchImpl = (url) => new Promise((resolve) => requests.push({ url, resolve }));
+  const states = [];
+  const valuation = loadValuation();
+  const controller = valuation.createController({
+    fetchImpl,
+    onState: (state) => states.push(state),
+  });
+
+  const first = controller.query("510500");
+  const second = controller.query("000300");
+  requests[1].resolve({ ok: true, json: async () => ({ code: "000300", name: "沪深300" }) });
+  await second;
+  requests[0].resolve({ ok: true, json: async () => ({ code: "510500", name: "中证500ETF" }) });
+  await first;
+
+  assert.equal(states.at(-1).kind, "success");
+  assert.equal(states.at(-1).data.code, "000300");
+});
+
+test("builds separate thermometer and PE/PB valuation views", () => {
+  const { buildView } = loadValuation();
+  const thermometer = buildView({
+    code: "510500",
+    name: "中证500ETF南方",
+    trackedIndex: { code: "000905", name: "中证500" },
+    source: "youzhiyouxing",
+    asOf: "2026-07-14",
+    thermometer: {
+      temperature: 76,
+      valuationBand: "偏高",
+      intrinsicReturnPct: 4.42,
+      dividendYieldPct: 1.53,
+    },
+    percentiles: null,
+    warnings: [],
+  });
+  const percentiles = buildView({
+    code: "000300",
+    name: "沪深300",
+    trackedIndex: { code: "000300", name: "沪深300" },
+    source: "historical_percentile",
+    asOf: "2026-07-14",
+    thermometer: null,
+    percentiles: {
+      pe: { currentValue: 12.3, percentilePct: 40, startDate: "2016-07-14", endDate: "2026-07-14", sampleCount: 2400 },
+      pb: { currentValue: 1.4, percentilePct: 30, startDate: "2016-07-14", endDate: "2026-07-14", sampleCount: 2400 },
+    },
+    warnings: [],
+  });
+
+  assert.deepEqual(Array.from(thermometer.metrics, (item) => item.label), [
+    "标的", "跟踪指数", "指数温度", "估值区间", "内在收益率", "股息率",
+  ]);
+  assert.deepEqual(Array.from(percentiles.metrics, (item) => item.label), [
+    "标的", "跟踪指数", "当前 PE", "PE 历史分位", "当前 PB", "PB 历史分位",
+  ]);
+  assert.equal(percentiles.sourceLabel, "历史 PE/PB 分位");
 });
