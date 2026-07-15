@@ -553,6 +553,18 @@ test("places generate and save actions in the compact page header", () => {
   assert.match(html, /<section id="results"[\s\S]*id="export-csv-button"/);
 });
 
+test("defines compact desktop and responsive parameter-pressure layouts", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+
+  assert.match(html, /class="panel parameter-panel"/);
+  assert.match(html, /class="panel pressure-panel"/);
+  assert.match(html, /id="pressure-summary" class="metric-grid pressure-grid"/);
+  assert.match(html, /\.form-grid\s*{[^}]*grid-template-columns:\s*repeat\(4,/);
+  assert.match(html, /\.pressure-grid\s*{[^}]*grid-template-columns:\s*repeat\(6,/);
+  assert.match(html, /@media \(max-width: 1100px\)[\s\S]*?\.form-grid[^}]*repeat\(2,/);
+  assert.match(html, /@media \(max-width: 720px\)[\s\S]*?\.form-grid, \.metric-grid[^}]*1fr/);
+});
+
 test("wires local save, reload, overwrite, and confirmed delete behavior", () => {
   const html = fs.readFileSync(htmlPath, "utf8");
   assert.match(html, /localStorage\.getItem\(STRATEGY_STORAGE_KEY\)/);
