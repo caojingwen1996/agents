@@ -1,4 +1,45 @@
 {
   "version": 2,
-  "records": []
+  "records": [
+    {
+      "version": 2,
+      "code": "510500",
+      "name": "XD中证500ETF南方",
+      "symbol": "XD中证500ETF南方",
+      "savedAt": "2026-07-15T11:16:26.181Z",
+      "input": {
+        "startPrice": "8.1",
+        "stepPct": "6",
+        "maxDropPct": "70",
+        "fundingMode": "perGrid",
+        "amount": "5000",
+        "feePct": "0",
+        "profitRetentionMultiple": 0
+      },
+      "valuationSnapshot": {
+        "version": 1,
+        "code": "510500",
+        "name": "XD中证500ETF南方",
+        "instrumentType": "etf",
+        "trackedIndex": {
+          "code": "000905",
+          "name": "中证500"
+        },
+        "queriedAt": "2026-07-15T19:14:41.384247+08:00",
+        "cached": false,
+        "warnings": [],
+        "source": "youzhiyouxing",
+        "asOf": "2026-07-14",
+        "thermometer": {
+          "temperature": 76,
+          "valuationBand": "偏高",
+          "intrinsicReturnPct": 4.42,
+          "dividendYieldPct": 1.53,
+          "url": "https://youzhiyouxing.cn/data/indices/000905.SH"
+        },
+        "percentiles": null,
+        "isSnapshot": true
+      }
+    }
+  ]
 }
