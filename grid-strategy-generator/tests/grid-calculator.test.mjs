@@ -426,6 +426,23 @@ test("keeps retention quantities independent from fees", () => {
   assert.equal(row.combinedProfit, 479.92);
 });
 
+test("calculates cash and combined return rates for retained-profit rows", () => {
+  const { calculateGrid } = loadCalculator();
+  const row = calculateGrid({
+    startPrice: 1,
+    stepPct: 5,
+    maxDropPct: 5,
+    fundingMode: "perGrid",
+    amount: 10_000,
+    feePct: 0.1,
+    profitRetentionMultiple: 1,
+  }).levels[0];
+
+  assert.equal(row.cashReturnPct, 0.6);
+  assert.equal(row.combinedReturnPct, 4.8);
+  assert.equal(row.netReturnPct, row.combinedReturnPct);
+});
+
 test("handles zero retained shares, full retention, and invalid multiples", () => {
   const { calculateGrid } = loadCalculator();
   const base = {

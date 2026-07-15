@@ -519,6 +519,8 @@
         const sellFee = roundMoney(sellAmount * feeRate);
         const cashPnl = roundMoney(sellAmount - actualBuyAmount - buyFee - sellFee);
         const combinedProfit = roundMoney(cashPnl + retainedMarketValue);
+        const cashReturnPct = roundPct(cashPnl / actualBuyAmount * 100);
+        const combinedReturnPct = roundPct(combinedProfit / actualBuyAmount * 100);
         const grossProfit = fullGrossProfit;
         const netProfit = profitRetentionMultiple === 0 ? cashPnl : combinedProfit;
 
@@ -540,7 +542,9 @@
           netProfit,
           cashPnl,
           combinedProfit,
-          netReturnPct: roundPct(netProfit / actualBuyAmount * 100),
+          cashReturnPct,
+          combinedReturnPct,
+          netReturnPct: profitRetentionMultiple === 0 ? cashReturnPct : combinedReturnPct,
         };
       });
 
