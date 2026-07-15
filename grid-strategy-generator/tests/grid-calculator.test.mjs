@@ -541,6 +541,38 @@ test("contains a responsive saved-strategy sidebar and save feedback", () => {
   assert.match(html, /\.strategy-item\.is-active \.strategy-load strong\s*{[^}]*font-weight:\s*800/);
 });
 
+test("places generate and save actions in the compact page header", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  const header = html.match(/<header class="top-toolbar">([\s\S]*?)<\/header>/)?.[1] ?? "";
+  const form = html.match(/<form id="grid-form"[^>]*>([\s\S]*?)<\/form>/)?.[1] ?? "";
+
+  assert.match(header, /<h1>网格策略 1\.0 生成器<\/h1>/);
+  assert.match(header, /type="submit" form="grid-form"/);
+  assert.match(header, /id="save-strategy-button"/);
+  assert.doesNotMatch(form, /class="form-actions"/);
+  assert.match(html, /<section id="results"[\s\S]*id="export-csv-button"/);
+});
+
+test("defines compact desktop and responsive parameter-pressure layouts", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+
+  assert.match(html, /class="panel parameter-panel"/);
+  assert.match(html, /class="panel pressure-panel"/);
+  assert.match(html, /id="pressure-summary" class="metric-grid pressure-grid"/);
+  assert.match(html, /\.form-grid\s*{[^}]*grid-template-columns:\s*repeat\(4,/);
+  assert.match(html, /\.pressure-grid\s*{[^}]*grid-template-columns:\s*repeat\(6,/);
+  assert.match(html, /@media \(max-width: 1100px\)[\s\S]*?\.form-grid[^}]*repeat\(2,/);
+  assert.match(html, /@media \(max-width: 720px\)[\s\S]*?\.form-grid, \.metric-grid[^}]*1fr/);
+});
+
+test("keeps form controls before saved-strategy actions in keyboard order", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+
+  assert.ok(html.indexOf('id="tool-column"') < html.indexOf('class="panel strategy-sidebar"'));
+  assert.match(html, /\.app-layout\s*{[^}]*grid-template-areas:\s*"sidebar tool"/);
+  assert.match(html, /@media \(max-width: 900px\)[\s\S]*?grid-template-areas:\s*"tool"\s*"sidebar"/);
+});
+
 test("wires local save, reload, overwrite, and confirmed delete behavior", () => {
   const html = fs.readFileSync(htmlPath, "utf8");
   assert.match(html, /localStorage\.getItem\(STRATEGY_STORAGE_KEY\)/);
