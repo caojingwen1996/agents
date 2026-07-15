@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import math
 import re
+from copy import deepcopy
+from dataclasses import dataclass
 from datetime import date
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 
 from dateutil.relativedelta import relativedelta
@@ -86,3 +89,154 @@ def calculate_percentile(
         "endDate": window[-1][0].isoformat(),
         "sampleCount": len(window),
     }
+
+
+@dataclass(frozen=True)
+class _CacheEntry:
+    expires_at: datetime
+    value: dict[str, Any]
+
+
+def _public_source_error(error: Exception) -> ValuationError:
+    code = getattr(error, "code", "INSTRUMENT_LOOKUP_FAILED")
+    message = getattr(error, "message", "无法识别标的代码")
+    status = 422 if code in {
+        "UNSUPPORTED_INSTRUMENT",
+        "TRACKING_INDEX_NOT_FOUND",
+        "AMBIGUOUS_INDEX",
+    } else 502
+    return ValuationError(code, message, status)
+
+
+class ValuationService:
+    """Apply source priority and return a stable, cacheable API response."""
+
+    def __init__(
+        self,
+        source: Any,
+        *,
+        thermometer_listing: Any,
+        thermometer_detail: Any,
+        clock: Any = None,
+        ttl: timedelta = timedelta(hours=1),
+    ):
+        self._source = source
+        self._thermometer_listing = thermometer_listing
+        self._thermometer_detail = thermometer_detail
+        self._clock = clock or (lambda: datetime.now(timezone(timedelta(hours=8))))
+        self._ttl = ttl
+        self._cache: dict[str, _CacheEntry] = {}
+
+    def lookup(self, raw_code: Any) -> dict[str, Any]:
+        code = validate_code(raw_code)
+        now = self._clock()
+        cached = self._cache.get(code)
+        if cached is not None and cached.expires_at > now:
+            result = deepcopy(cached.value)
+            result["cached"] = True
+            return result
+
+        try:
+            instrument = self._source.resolve(code)
+        except ValuationError:
+            raise
+        except Exception as error:
+            raise _public_source_error(error) from error
+
+        warnings: list[dict[str, str]] = []
+        listing: Sequence[Mapping[str, Any]] = []
+        thermometer_failed = False
+        try:
+            listing = self._thermometer_listing()
+        except Exception:
+            thermometer_failed = True
+
+        match = match_thermometer(
+            listing,
+            instrument.tracked_index_code,
+            instrument.tracked_index_name,
+        )
+        detail = None
+        if match is not None:
+            try:
+                detail = self._thermometer_detail(match["url"])
+            except Exception:
+                thermometer_failed = True
+
+        if thermometer_failed:
+            warnings.append({
+                "code": "THERMOMETER_UNAVAILABLE",
+                "message": "温度计暂不可用",
+            })
+
+        queried_at = now.isoformat()
+        if detail is not None:
+            result = self._thermometer_result(instrument, detail, queried_at, warnings)
+        else:
+            result = self._percentile_result(instrument, queried_at, warnings)
+
+        self._cache[code] = _CacheEntry(now + self._ttl, deepcopy(result))
+        return result
+
+    @staticmethod
+    def _base_result(instrument: Any, queried_at: str, warnings: list[dict[str, str]]):
+        return {
+            "version": 1,
+            "code": instrument.code,
+            "name": instrument.name,
+            "instrumentType": instrument.instrument_type,
+            "trackedIndex": {
+                "code": instrument.tracked_index_code,
+                "name": instrument.tracked_index_name,
+            },
+            "queriedAt": queried_at,
+            "cached": False,
+            "warnings": warnings,
+        }
+
+    def _thermometer_result(
+        self,
+        instrument: Any,
+        detail: Mapping[str, Any],
+        queried_at: str,
+        warnings: list[dict[str, str]],
+    ) -> dict[str, Any]:
+        return {
+            **self._base_result(instrument, queried_at, warnings),
+            "source": "youzhiyouxing",
+            "asOf": detail.get("asOf"),
+            "thermometer": {
+                "temperature": detail.get("temperature"),
+                "valuationBand": detail.get("valuationBand"),
+                "intrinsicReturnPct": detail.get("intrinsicReturnPct"),
+                "dividendYieldPct": detail.get("dividendYieldPct"),
+                "url": detail.get("url"),
+            },
+            "percentiles": None,
+        }
+
+    def _percentile_result(
+        self,
+        instrument: Any,
+        queried_at: str,
+        warnings: list[dict[str, str]],
+    ) -> dict[str, Any]:
+        pe = self._metric_or_none(self._source.pe_points, instrument)
+        pb = self._metric_or_none(self._source.pb_points, instrument)
+        if pe is None and pb is None:
+            raise ValuationError("NO_VALUATION_DATA", "暂无估值数据", 502)
+        dates = [metric["endDate"] for metric in (pe, pb) if metric is not None]
+        return {
+            **self._base_result(instrument, queried_at, warnings),
+            "source": "historical_percentile",
+            "asOf": max(dates),
+            "thermometer": None,
+            "percentiles": {"pe": pe, "pb": pb},
+        }
+
+    @staticmethod
+    def _metric_or_none(fetcher: Any, instrument: Any) -> Optional[dict[str, Any]]:
+        try:
+            return calculate_percentile(fetcher(instrument))
+        except Exception:
+            return None
