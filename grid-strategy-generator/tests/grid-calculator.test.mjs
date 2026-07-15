@@ -565,6 +565,14 @@ test("defines compact desktop and responsive parameter-pressure layouts", () => 
   assert.match(html, /@media \(max-width: 720px\)[\s\S]*?\.form-grid, \.metric-grid[^}]*1fr/);
 });
 
+test("keeps form controls before saved-strategy actions in keyboard order", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+
+  assert.ok(html.indexOf('id="tool-column"') < html.indexOf('class="panel strategy-sidebar"'));
+  assert.match(html, /\.app-layout\s*{[^}]*grid-template-areas:\s*"sidebar tool"/);
+  assert.match(html, /@media \(max-width: 900px\)[\s\S]*?grid-template-areas:\s*"tool"\s*"sidebar"/);
+});
+
 test("wires local save, reload, overwrite, and confirmed delete behavior", () => {
   const html = fs.readFileSync(htmlPath, "utf8");
   assert.match(html, /localStorage\.getItem\(STRATEGY_STORAGE_KEY\)/);

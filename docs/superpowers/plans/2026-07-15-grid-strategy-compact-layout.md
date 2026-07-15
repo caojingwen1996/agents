@@ -283,8 +283,8 @@ Set the viewport to 375 × 812 and read:
   inputMinHeight: Math.min(...[...document.querySelectorAll('input, select')].map(
     (element) => element.getBoundingClientRect().height,
   )),
-  sidebarAboveTool: document.querySelector('.strategy-sidebar').getBoundingClientRect().top
-    < document.querySelector('#tool-column').getBoundingClientRect().top,
+  toolAboveSidebar: document.querySelector('#tool-column').getBoundingClientRect().top
+    < document.querySelector('.strategy-sidebar').getBoundingClientRect().top,
 })
 ```
 
@@ -292,7 +292,7 @@ Acceptance:
 
 - `pageOverflows === false`
 - generate/save/input heights are at least 44px
-- `sidebarAboveTool === true`
+- `toolAboveSidebar === true`, matching the keyboard order of form controls before saved strategies
 - the table retains its own horizontal scroll container
 
 - [ ] **Step 4: Check runtime errors and reset the viewport**
@@ -307,7 +307,7 @@ git diff --check master...HEAD
 git status --short --branch
 ```
 
-Expected: 29 tests pass, no diff-check errors, and the feature worktree is clean.
+Expected: 30 tests pass, no diff-check errors, and the feature worktree is clean.
 
 ### Task 4: Review and branch completion
 

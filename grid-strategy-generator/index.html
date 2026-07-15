@@ -158,11 +158,12 @@
     .app-layout {
       display: grid;
       grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+      grid-template-areas: "sidebar tool";
       align-items: start;
       gap: 16px;
     }
-    .tool-column { min-width: 0; }
-    .strategy-sidebar { position: sticky; top: 24px; }
+    .tool-column { grid-area: tool; min-width: 0; }
+    .strategy-sidebar { grid-area: sidebar; position: sticky; top: 24px; }
     .strategy-heading { margin-bottom: 12px; }
     .strategy-empty { margin: 0; color: var(--muted); font-size: 0.92rem; }
     .strategy-list { display: grid; gap: 10px; }
@@ -270,7 +271,10 @@
     }
 
     @media (max-width: 900px) {
-      .app-layout { grid-template-columns: 1fr; }
+      .app-layout {
+        grid-template-columns: 1fr;
+        grid-template-areas: "tool" "sidebar";
+      }
       .strategy-sidebar { position: static; }
     }
 
@@ -306,13 +310,6 @@
     </header>
 
     <div class="app-layout">
-      <aside class="panel strategy-sidebar" aria-labelledby="saved-strategy-title">
-        <div class="section-heading strategy-heading">
-          <h2 id="saved-strategy-title">已保存策略</h2>
-        </div>
-        <p id="saved-strategy-empty" class="strategy-empty">暂无已保存策略，生成方案后可保存。</p>
-        <div id="saved-strategy-list" class="strategy-list" role="list"></div>
-      </aside>
       <div id="tool-column" class="tool-column">
 
     <section class="panel parameter-panel" aria-labelledby="parameter-title">
@@ -411,6 +408,13 @@
 
     <p class="disclaimer">本工具只按输入参数生成网格计划，不判断标的价值、未来走势或策略适用性，不构成投资建议。</p>
       </div>
+      <aside class="panel strategy-sidebar" aria-labelledby="saved-strategy-title">
+        <div class="section-heading strategy-heading">
+          <h2 id="saved-strategy-title">已保存策略</h2>
+        </div>
+        <p id="saved-strategy-empty" class="strategy-empty">暂无已保存策略，生成方案后可保存。</p>
+        <div id="saved-strategy-list" class="strategy-list" role="list"></div>
+      </aside>
     </div>
   </main>
   <script>
