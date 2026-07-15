@@ -277,10 +277,16 @@
 </head>
 <body>
   <main class="page-shell">
-    <header class="hero">
-      <p class="eyebrow">固定步长 · 网格策略 1.0</p>
-      <h1>网格策略 1.0<br>计划生成器</h1>
-      <p class="hero-copy">手工设定参数，先查看资金压力，再查看每一档买卖计划。所有计算仅在当前浏览器中完成。</p>
+    <header class="top-toolbar">
+      <div class="title-group">
+        <p class="eyebrow">固定步长 · 网格策略 1.0</p>
+        <h1>网格策略 1.0 生成器</h1>
+        <p class="hero-copy">设置参数、检查资金压力，再制定每档买卖计划。</p>
+      </div>
+      <div class="top-actions" aria-label="策略操作">
+        <button class="primary-button" type="submit" form="grid-form">生成网格计划</button>
+        <button id="save-strategy-button" class="secondary-button" type="button" disabled>保存策略</button>
+      </div>
     </header>
 
     <div class="app-layout">
@@ -344,10 +350,6 @@
           <button class="preset-button" type="button" data-step="10">高波动 10%</button>
         </div>
         <p id="error-message" class="error" role="alert" tabindex="-1" hidden></p>
-        <div class="form-actions">
-          <button class="primary-button" type="submit">生成网格计划</button>
-          <button id="save-strategy-button" class="secondary-button" type="button" disabled>保存策略</button>
-        </div>
         <p id="save-status" class="save-status" aria-live="polite" hidden></p>
       </form>
     </section>

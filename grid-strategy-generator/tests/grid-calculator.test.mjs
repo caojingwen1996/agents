@@ -541,6 +541,18 @@ test("contains a responsive saved-strategy sidebar and save feedback", () => {
   assert.match(html, /\.strategy-item\.is-active \.strategy-load strong\s*{[^}]*font-weight:\s*800/);
 });
 
+test("places generate and save actions in the compact page header", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  const header = html.match(/<header class="top-toolbar">([\s\S]*?)<\/header>/)?.[1] ?? "";
+  const form = html.match(/<form id="grid-form"[^>]*>([\s\S]*?)<\/form>/)?.[1] ?? "";
+
+  assert.match(header, /<h1>网格策略 1\.0 生成器<\/h1>/);
+  assert.match(header, /type="submit" form="grid-form"/);
+  assert.match(header, /id="save-strategy-button"/);
+  assert.doesNotMatch(form, /class="form-actions"/);
+  assert.match(html, /<section id="results"[\s\S]*id="export-csv-button"/);
+});
+
 test("wires local save, reload, overwrite, and confirmed delete behavior", () => {
   const html = fs.readFileSync(htmlPath, "utf8");
   assert.match(html, /localStorage\.getItem\(STRATEGY_STORAGE_KEY\)/);
