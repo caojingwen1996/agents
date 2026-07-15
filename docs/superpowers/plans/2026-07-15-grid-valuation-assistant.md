@@ -163,7 +163,7 @@ def test_parse_thermometer_fixture():
 def test_resolve_etf_uses_benchmark_then_unique_index_name():
     source = AkshareSource(
         etf_rows=lambda: [{"代码": "510500", "名称": "中证500ETF"}],
-        fund_basic=lambda code: [{"item": "业绩比较基准", "value": "中证500指数收益率×95%+银行活期存款利率×5%"}],
+        tracking_target=lambda code: "中证500指数",
         index_rows=lambda: [{"index_code": "000905", "display_name": "中证500"}],
     )
     assert source.resolve("510500").tracked_index_code == "000905"
@@ -187,12 +187,10 @@ class Instrument:
     tracked_index_name: str
 
 class AkshareSource:
-    def __init__(self, etf_rows=None, fund_basic=None, index_rows=None,
+    def __init__(self, etf_rows=None, tracking_target=None, index_rows=None,
                  pe_history=None, pb_history=None):
         self._etf_rows = etf_rows or (lambda: ak.fund_etf_spot_em().to_dict("records"))
-        self._fund_basic = fund_basic or (
-            lambda code: ak.fund_individual_basic_info_xq(code, timeout=10).to_dict("records")
-        )
+        self._tracking_target = tracking_target or fetch_eastmoney_tracking_target
         self._index_rows = index_rows or (lambda: ak.index_stock_info().to_dict("records"))
         self._pe_history = pe_history or ak.stock_index_pe_lg
         self._pb_history = pb_history or ak.stock_index_pb_lg
@@ -201,7 +199,7 @@ class AkshareSource:
         indexes = self._index_rows()
         etf = next((row for row in self._etf_rows() if str(row["代码"]).zfill(6) == code), None)
         if etf:
-            benchmark = _basic_value(self._fund_basic(code), "业绩比较基准")
+            benchmark = self._tracking_target(code)
             index = _resolve_unique_benchmark(benchmark, indexes)
             return Instrument(code, str(etf["名称"]), "etf",
                               index["index_code"], index["display_name"])
@@ -211,7 +209,7 @@ class AkshareSource:
         return Instrument(code, index["display_name"], "index", code, index["display_name"])
 ```
 
-The benchmark resolver removes “指数/收益率/全收益” suffixes and allocation expressions, then requires exactly one normalized index-name match. It raises `AMBIGUOUS_INDEX` instead of guessing. PE/PB calls use the resolved display name because AKShare 1.18.64's Legulegu functions accept named indexes; unsupported index names produce a clean missing-metric result rather than a fabricated value.
+`fetch_eastmoney_tracking_target` reads the public basic-information page at `https://fundf10.eastmoney.com/{code}.html`, extracts the table cell labelled “跟踪标的”, and rejects “该基金无跟踪标的”. The benchmark resolver removes “指数/收益率/全收益” suffixes and allocation expressions, then requires exactly one normalized index-name match. It raises `AMBIGUOUS_INDEX` instead of guessing. PE/PB calls use the resolved display name because AKShare 1.18.64's Legulegu functions accept named indexes; unsupported index names produce a clean missing-metric result rather than a fabricated value.
 
 - [ ] Implement thermometer parsing with a fixture-backed contract and no arbitrary URL input.
 
@@ -226,14 +224,14 @@ def fetch_thermometer(session=requests, timeout=10):
 
 def parse_thermometer_html(html: str):
     soup = BeautifulSoup(html, "html.parser")
-    payload = _find_next_data_or_json_script(soup)
-    rows = _walk_for_thermometer_rows(payload)
+    updated_at = _extract_temperature_update_time(soup.get_text(" ", strip=True))
+    rows = _extract_index_observation_links(soup)
     if not rows:
         raise SourceError("THERMOMETER_FORMAT_CHANGED", "温度计页面结构已变化")
-    return [_normalize_thermometer_row(row) for row in rows]
+    return [_normalize_thermometer_row(row, updated_at) for row in rows]
 ```
 
-The parser accepts JSON embedded in `script#__NEXT_DATA__` or `script[type='application/json']`, recursively locates list entries that contain an index name plus temperature, and requires the normalized output fields used by the service. The HTML fixture reproduces only that structural contract and contains no copied article text.
+The parser scopes itself to the heading “指数观察”, reads each observation link's visible text in the order `名称 代码 温度 内在收益率 股息率`, and extracts the page-level “温度更新时间”. It accepts exchange suffixes such as `.SH`, `.SZ`, and `.CSI`, normalizes them to six-character index codes for matching, and treats `--` as a missing numeric field. The HTML fixture reproduces only that structural contract and contains no copied article text.
 
 - [ ] Add bounded dependencies.
 
