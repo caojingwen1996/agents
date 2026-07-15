@@ -890,9 +890,11 @@
   <script>
   /* GRID_STRATEGY_STORE_START */
   (() => {
-    const STORE_VERSION = 1;
+    const STORE_VERSION = 2;
+    const LEGACY_STORE_VERSION = 1;
     const ALLOWED_FUNDING_MODES = new Set(["total", "perGrid"]);
     const ALLOWED_RETENTION_MULTIPLES = new Set([0, 1, 2, 3]);
+    const ALLOWED_VALUATION_SOURCES = new Set(["youzhiyouxing", "historical_percentile"]);
 
     function normalizeInput(input) {
       const normalized = {
@@ -930,23 +932,69 @@
       return normalized;
     }
 
-    function createRecord(symbol, input, savedAt = new Date()) {
-      const normalizedSymbol = String(symbol ?? "").trim();
-      if (!normalizedSymbol) throw new Error("标的名称不能为空");
-      const isoTime = savedAt instanceof Date
-        ? savedAt.toISOString()
-        : new Date(savedAt).toISOString();
+    function normalizeSnapshot(snapshot) {
+      if (snapshot == null) return null;
+      const cloned = JSON.parse(JSON.stringify(snapshot));
+      const code = String(cloned.code ?? "").trim();
+      const queriedAt = new Date(cloned.queriedAt);
+      if (
+        cloned.version !== 1
+        || !/^\d{6}$/.test(code)
+        || !ALLOWED_VALUATION_SOURCES.has(cloned.source)
+        || Number.isNaN(queriedAt.getTime())
+      ) {
+        throw new Error("保存的估值快照无效");
+      }
+      return { ...cloned, code, isSnapshot: true };
+    }
+
+    function toIso(value) {
+      const date = value == null ? new Date() : new Date(value);
+      if (Number.isNaN(date.getTime())) throw new Error("保存时间无效");
+      return date.toISOString();
+    }
+
+    function createRecord(instrument, input, valuationSnapshot = null, savedAt = new Date()) {
+      const code = String(instrument?.code ?? "").trim();
+      const name = String(instrument?.name ?? "").trim();
+      if (code && !/^\d{6}$/.test(code)) throw new Error("标的代码必须为 6 位数字");
+      if (!code && !name) throw new Error("标的代码或名称不能为空");
       return {
         version: STORE_VERSION,
-        symbol: normalizedSymbol,
-        savedAt: isoTime,
+        code,
+        name,
+        symbol: name || code,
+        savedAt: toIso(savedAt),
         input: normalizeInput(input),
+        valuationSnapshot: normalizeSnapshot(valuationSnapshot),
       };
     }
 
     function normalizeRecord(record) {
-      if (record?.version !== STORE_VERSION) throw new Error("保存记录版本无效");
-      return createRecord(record.symbol, record.input, record.savedAt);
+      if (record?.version === STORE_VERSION) {
+        return createRecord(
+          { code: record.code, name: record.name || record.symbol },
+          record.input,
+          record.valuationSnapshot,
+          record.savedAt,
+        );
+      }
+      if (record?.version === LEGACY_STORE_VERSION) {
+        const symbol = String(record.symbol ?? "").trim();
+        if (!symbol) throw new Error("旧策略标的名称为空");
+        const parsed = symbol.match(/^(\d{6})(?:\s+(.+))?$/);
+        return createRecord(
+          { code: parsed?.[1] || "", name: parsed?.[2] || symbol },
+          record.input,
+          null,
+          record.savedAt,
+        );
+      }
+      throw new Error("保存记录版本无效");
+    }
+
+    function recordKey(record) {
+      return String(record.code || record.name || record.symbol || "").trim();
     }
 
     function sortNewestFirst(records) {
@@ -955,15 +1003,16 @@
 
     function upsertRecord(records, record) {
       const normalized = normalizeRecord(record);
+      const key = recordKey(normalized);
       return sortNewestFirst([
-        ...records.filter((item) => item.symbol !== normalized.symbol),
+        ...records.filter((item) => recordKey(item) !== key),
         normalized,
       ]);
     }
 
-    function removeRecord(records, symbol) {
-      const normalizedSymbol = String(symbol ?? "").trim();
-      return records.filter((record) => record.symbol !== normalizedSymbol);
+    function removeRecord(records, identity) {
+      const key = String(identity ?? "").trim();
+      return records.filter((record) => recordKey(record) !== key);
     }
 
     function parseStore(raw) {
@@ -974,7 +1023,10 @@
       } catch {
         return { records: [], skippedCount: 1 };
       }
-      if (envelope?.version !== STORE_VERSION || !Array.isArray(envelope.records)) {
+      if (
+        ![STORE_VERSION, LEGACY_STORE_VERSION].includes(envelope?.version)
+        || !Array.isArray(envelope.records)
+      ) {
         return { records: [], skippedCount: 1 };
       }
       const records = [];
@@ -982,7 +1034,7 @@
       for (const candidate of envelope.records) {
         try {
           const record = normalizeRecord(candidate);
-          const existingIndex = records.findIndex((item) => item.symbol === record.symbol);
+          const existingIndex = records.findIndex((item) => recordKey(item) === recordKey(record));
           if (existingIndex >= 0) records.splice(existingIndex, 1);
           records.push(record);
         } catch {
@@ -999,7 +1051,9 @@
     window.GridStrategyStore = {
       STORE_VERSION,
       createRecord,
+      normalizeSnapshot,
       parseStore,
+      recordKey,
       removeRecord,
       serializeStore,
       upsertRecord,
@@ -1052,25 +1106,34 @@
         return;
       }
       if (state.kind === "loading") {
-        status.textContent = `正在查询 ${state.code} 的估值数据…`;
+        status.textContent = currentValuation?.isSnapshot
+          ? `正在刷新 ${state.code}，当前仍显示历史快照…`
+          : `正在查询 ${state.code} 的估值数据…`;
         return;
       }
       if (state.kind === "error") {
-        status.textContent = `${state.message}，可点击重试。`;
-        content.replaceChildren();
-        meta.hidden = true;
+        status.textContent = currentValuation?.isSnapshot
+          ? `刷新失败：${state.message}。当前仍显示历史快照，可点击重试。`
+          : `${state.message}，可点击重试。`;
+        if (!currentValuation?.isSnapshot) {
+          content.replaceChildren();
+          meta.hidden = true;
+        }
         return;
       }
 
-      currentValuation = { ...state.data, isSnapshot: false };
+      const isSnapshot = state.kind === "snapshot" || Boolean(state.data.isSnapshot);
+      currentValuation = { ...state.data, isSnapshot };
       const view = window.GridValuation.buildView(currentValuation);
-      status.textContent = `已更新：${state.data.code} ${state.data.name || ""}`.trim();
+      status.textContent = isSnapshot
+        ? `历史快照，不是最新数据：${state.data.code} ${state.data.name || ""}`.trim()
+        : `已更新：${state.data.code} ${state.data.name || ""}`.trim();
       content.replaceChildren(...view.metrics.map((item) => metric(item.label, item.value)));
       const warnings = view.warnings.map((warning) => warning.message).filter(Boolean);
       meta.textContent = [
         `来源：${view.sourceLabel}`,
         `数据日期：${view.asOf}`,
-        state.data.cached ? "一小时缓存结果" : "本次查询结果",
+        isSnapshot ? "历史快照，不是最新数据" : (state.data.cached ? "一小时缓存结果" : "本次查询结果"),
         ...warnings,
       ].join(" · ");
       meta.classList.toggle("valuation-snapshot", view.isSnapshot);
@@ -1117,16 +1180,18 @@
       list.replaceChildren(...savedStrategies.map((record) => {
         const item = document.createElement("div");
         item.className = "strategy-item";
-        item.classList.toggle("is-active", record.symbol === activeSavedSymbol);
+        const recordKey = window.GridStrategyStore.recordKey(record);
+        const displayName = [record.code, record.name].filter(Boolean).join(" ") || record.symbol;
+        item.classList.toggle("is-active", recordKey === activeSavedSymbol);
         item.setAttribute("role", "listitem");
 
         const loadButton = document.createElement("button");
         loadButton.type = "button";
         loadButton.className = "strategy-load";
-        loadButton.setAttribute("aria-label", `载入 ${record.symbol} 策略`);
+        loadButton.setAttribute("aria-label", `载入 ${displayName} 策略`);
         loadButton.addEventListener("click", () => loadStrategy(record));
         const name = document.createElement("strong");
-        name.textContent = record.symbol;
+        name.textContent = displayName;
         const savedAt = document.createElement("time");
         savedAt.dateTime = record.savedAt;
         savedAt.textContent = savedAtFormatter.format(new Date(record.savedAt));
@@ -1136,7 +1201,7 @@
         deleteButton.type = "button";
         deleteButton.className = "strategy-delete";
         deleteButton.textContent = "删除";
-        deleteButton.setAttribute("aria-label", `删除 ${record.symbol} 策略`);
+        deleteButton.setAttribute("aria-label", `删除 ${displayName} 策略`);
         deleteButton.addEventListener("click", () => deleteStrategy(record));
 
         item.append(loadButton, deleteButton);
@@ -1161,7 +1226,7 @@
     }
 
     function loadStrategy(record) {
-      byId("instrument-code").value = /^\d{6}$/.test(record.symbol) ? record.symbol : "";
+      byId("instrument-code").value = record.code || "";
       byId("start-price").value = record.input.startPrice;
       byId("step-pct").value = record.input.stepPct;
       byId("max-drop-pct").value = record.input.maxDropPct;
@@ -1170,10 +1235,16 @@
       byId("fee-pct").value = record.input.feePct;
       byId("profit-retention").value = String(record.input.profitRetentionMultiple);
       updateFundingLabel();
-      activeSavedSymbol = record.symbol;
+      activeSavedSymbol = window.GridStrategyStore.recordKey(record);
       renderSavedStrategies();
-      setSaveStatus("");
+      if (record.valuationSnapshot) {
+        renderValuationState({ kind: "snapshot", data: record.valuationSnapshot });
+      } else {
+        renderValuationState({ kind: "empty", code: record.code || "" });
+      }
+      setSaveStatus(record.code ? "" : "历史策略未保存代码，请补充 6 位代码。", !record.code);
       byId("grid-form").requestSubmit();
+      if (record.code) valuationController.query(record.code);
     }
 
     function deleteStrategy(record) {
@@ -1181,13 +1252,14 @@
         `确定删除“${record.symbol}”策略吗？已下载的 CSV 不会被删除。`,
       );
       if (!confirmed) return;
-      const nextRecords = window.GridStrategyStore.removeRecord(savedStrategies, record.symbol);
+      const recordKey = window.GridStrategyStore.recordKey(record);
+      const nextRecords = window.GridStrategyStore.removeRecord(savedStrategies, recordKey);
       try {
         localStorage.setItem(STRATEGY_STORAGE_KEY,
           window.GridStrategyStore.serializeStore(nextRecords),
         );
         savedStrategies = nextRecords;
-        if (activeSavedSymbol === record.symbol) activeSavedSymbol = null;
+        if (activeSavedSymbol === recordKey) activeSavedSymbol = null;
         renderSavedStrategies();
         setSaveStatus(`已从左侧列表删除“${record.symbol}”。`);
       } catch (error) {
@@ -1389,7 +1461,7 @@
     saveStrategyButton.addEventListener("click", () => {
       const symbolInput = byId("instrument-code");
       const symbol = symbolInput.value.trim();
-      if (!symbol) {
+      if (!/^\d{6}$/.test(symbol)) {
         setSaveStatus("请填写 6 位标的代码并重新生成网格计划。", true);
         symbolInput.focus();
         return;
@@ -1403,7 +1475,14 @@
         return;
       }
 
-      const record = window.GridStrategyStore.createRecord(symbol, latestPlan.input, new Date());
+      const resolvedName = currentValuation?.code === symbol ? currentValuation.name : "";
+      const snapshot = currentValuation?.code === symbol ? currentValuation : null;
+      const record = window.GridStrategyStore.createRecord(
+        { code: symbol, name: resolvedName },
+        latestPlan.input,
+        snapshot,
+        new Date(),
+      );
       const nextRecords = window.GridStrategyStore.upsertRecord(savedStrategies, record);
       let csvSaved = false;
       let indexSaved = false;
@@ -1420,7 +1499,7 @@
           window.GridStrategyStore.serializeStore(nextRecords),
         );
         savedStrategies = nextRecords;
-        activeSavedSymbol = symbol;
+        activeSavedSymbol = window.GridStrategyStore.recordKey(record);
         renderSavedStrategies();
         indexSaved = true;
       } catch (error) {

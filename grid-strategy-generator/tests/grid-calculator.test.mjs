@@ -62,92 +62,103 @@ function loadValuation(overrides = {}) {
   return context.window.GridValuation;
 }
 
-test("creates normalized versioned strategy records", () => {
+const savedInput = {
+  startPrice: "8.3", stepPct: "5", maxDropPct: "40", fundingMode: "perGrid",
+  amount: "10000", feePct: "0.1", profitRetentionMultiple: 2,
+};
+
+const valuationSnapshot = {
+  version: 1,
+  code: "510500",
+  name: "中证500ETF南方",
+  instrumentType: "etf",
+  trackedIndex: { code: "000905", name: "中证500" },
+  source: "youzhiyouxing",
+  asOf: "2026-07-14",
+  queriedAt: "2026-07-15T10:00:00+08:00",
+  cached: false,
+  thermometer: {
+    temperature: 76, valuationBand: "偏高", intrinsicReturnPct: 4.42,
+    dividendYieldPct: 1.53, url: "https://youzhiyouxing.cn/data/indices/000905.SH",
+  },
+  percentiles: null,
+  warnings: [],
+};
+
+test("creates version two strategy records with an immutable valuation snapshot", () => {
   const { createRecord } = loadStrategyStore();
-  const record = createRecord("  159198 港芯  ", {
-    startPrice: "8.3",
-    stepPct: "5",
-    maxDropPct: "40",
-    fundingMode: "perGrid",
-    amount: "10000",
-    feePct: "0.1",
-    profitRetentionMultiple: 2,
-  }, new Date("2026-07-14T10:20:30.000Z"));
+  const record = createRecord(
+    { code: " 510500 ", name: " 中证500ETF南方 " },
+    savedInput,
+    valuationSnapshot,
+    new Date("2026-07-14T10:20:30.000Z"),
+  );
 
   assert.deepEqual(JSON.parse(JSON.stringify(record)), {
-    version: 1,
-    symbol: "159198 港芯",
+    version: 2,
+    code: "510500",
+    name: "中证500ETF南方",
+    symbol: "中证500ETF南方",
     savedAt: "2026-07-14T10:20:30.000Z",
-    input: {
-      startPrice: "8.3",
-      stepPct: "5",
-      maxDropPct: "40",
-      fundingMode: "perGrid",
-      amount: "10000",
-      feePct: "0.1",
-      profitRetentionMultiple: 2,
-    },
+    input: savedInput,
+    valuationSnapshot: { ...valuationSnapshot, isSnapshot: true },
   });
 });
 
-test("upserts saved strategies by exact trimmed symbol and sorts newest first", () => {
+test("upserts saved strategies by code and sorts newest first", () => {
   const { createRecord, upsertRecord } = loadStrategyStore();
-  const older = createRecord("港芯", {
-    startPrice: "8", stepPct: "5", maxDropPct: "20", fundingMode: "total",
-    amount: "90000", feePct: "0", profitRetentionMultiple: 0,
-  }, new Date("2026-07-14T09:00:00.000Z"));
-  const newer = createRecord("有色", {
-    startPrice: "1", stepPct: "5", maxDropPct: "30", fundingMode: "perGrid",
-    amount: "10000", feePct: "0", profitRetentionMultiple: 1,
-  }, new Date("2026-07-14T10:00:00.000Z"));
-  const replacement = createRecord("港芯", {
-    startPrice: "8.3", stepPct: "10", maxDropPct: "40", fundingMode: "perGrid",
-    amount: "12000", feePct: "0.1", profitRetentionMultiple: 2,
-  }, new Date("2026-07-14T11:00:00.000Z"));
+  const older = createRecord({ code: "510500", name: "旧名称" }, savedInput, null,
+    new Date("2026-07-14T09:00:00.000Z"));
+  const newer = createRecord({ code: "000300", name: "沪深300" }, savedInput, null,
+    new Date("2026-07-14T10:00:00.000Z"));
+  const replacement = createRecord({ code: "510500", name: "中证500ETF南方" },
+    { ...savedInput, startPrice: "8.8" }, null,
+    new Date("2026-07-14T11:00:00.000Z"));
 
   const records = upsertRecord(upsertRecord([older], newer), replacement);
-  assert.deepEqual(Array.from(records, (record) => record.symbol), ["港芯", "有色"]);
-  assert.equal(records[0].input.startPrice, "8.3");
+  assert.deepEqual(Array.from(records, (record) => record.code), ["510500", "000300"]);
+  assert.equal(records[0].name, "中证500ETF南方");
+  assert.equal(records[0].input.startPrice, "8.8");
 });
 
-test("parses valid saved records while skipping damaged data", () => {
+test("migrates version one records while skipping damaged data", () => {
   const { parseStore } = loadStrategyStore();
-  const good = {
+  const legacy = {
     version: 1,
     symbol: "港芯",
     savedAt: "2026-07-14T10:00:00.000Z",
-    input: {
-      startPrice: "8.3", stepPct: "5", maxDropPct: "40", fundingMode: "perGrid",
-      amount: "10000", feePct: "0", profitRetentionMultiple: 0,
-    },
+    input: { ...savedInput, feePct: "0", profitRetentionMultiple: 0 },
   };
 
   assert.deepEqual(JSON.parse(JSON.stringify(parseStore("not json"))), {
     records: [], skippedCount: 1,
   });
-  assert.deepEqual(JSON.parse(JSON.stringify(parseStore(JSON.stringify({
+  const parsed = JSON.parse(JSON.stringify(parseStore(JSON.stringify({
     version: 1,
     records: [
-      good,
-      { ...good, symbol: "" },
-      { ...good, symbol: "bad-price", input: { ...good.input, startPrice: "garbage" } },
-      { ...good, symbol: "bad-step", input: { ...good.input, stepPct: "999" } },
-      { ...good, symbol: "bad-amount", input: { ...good.input, amount: "-1" } },
-      { ...good, symbol: "bad-fee", input: { ...good.input, feePct: "not-a-number" } },
+      legacy,
+      { ...legacy, symbol: "" },
+      { ...legacy, symbol: "bad-price", input: { ...legacy.input, startPrice: "garbage" } },
     ],
-  })))), {
-    records: [good], skippedCount: 5,
+  }))));
+  assert.equal(parsed.skippedCount, 2);
+  assert.deepEqual(parsed.records[0], {
+    version: 2,
+    code: "",
+    name: "港芯",
+    symbol: "港芯",
+    savedAt: legacy.savedAt,
+    input: legacy.input,
+    valuationSnapshot: null,
   });
 });
 
-test("removes one saved symbol and serializes the versioned envelope", () => {
+test("removes one saved code and serializes a version two envelope", () => {
   const { createRecord, removeRecord, serializeStore } = loadStrategyStore();
-  const record = createRecord("港芯", {
-    startPrice: "8.3", stepPct: "5", maxDropPct: "40", fundingMode: "perGrid",
-    amount: "10000", feePct: "0", profitRetentionMultiple: 0,
-  }, new Date("2026-07-14T10:00:00.000Z"));
-  assert.deepEqual(Array.from(removeRecord([record], " 港芯 ")), []);
-  assert.equal(serializeStore([record]), JSON.stringify({ version: 1, records: [record] }));
+  const record = createRecord({ code: "510500", name: "中证500ETF南方" }, savedInput, null,
+    new Date("2026-07-14T10:00:00.000Z"));
+  assert.deepEqual(Array.from(removeRecord([record], " 510500 ")), []);
+  assert.equal(serializeStore([record]), JSON.stringify({ version: 2, records: [record] }));
 });
 
 test("reproduces the article's arithmetic price grid", () => {
@@ -732,4 +743,13 @@ test("builds separate thermometer and PE/PB valuation views", () => {
     "标的", "跟踪指数", "当前 PE", "PE 历史分位", "当前 PB", "PB 历史分位",
   ]);
   assert.equal(percentiles.sourceLabel, "历史 PE/PB 分位");
+});
+
+test("loads saved valuation snapshots before refreshing valid codes", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+
+  assert.match(html, /record\.valuationSnapshot[\s\S]*kind:\s*"snapshot"/);
+  assert.match(html, /valuationController\.query\(record\.code\)/);
+  assert.match(html, /历史策略未保存代码，请补充 6 位代码/);
+  assert.match(html, /currentValuation\?\.isSnapshot/);
 });
