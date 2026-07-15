@@ -1130,6 +1130,53 @@
   /* GRID_STRATEGY_STORE_END */
   </script>
   <script>
+  /* GRID_PERSISTENCE_START */
+  (() => {
+    async function request(fetchImpl, url, options) {
+      const response = await fetchImpl(url, options);
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error?.message || "策略文件操作失败");
+      }
+      return payload;
+    }
+
+    function createClient(fetchImpl = fetch) {
+      return {
+        load: () => request(fetchImpl, "/api/strategies"),
+        save: (store) => request(fetchImpl, "/api/strategies", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(store),
+        }),
+        importLegacy: (store) => request(fetchImpl, "/api/strategies/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(store),
+        }),
+        migrationStatus: () => request(fetchImpl, "/api/strategies/migration-status"),
+      };
+    }
+
+    function buildMigrationUrl(ports, returnUrl) {
+      const available = ports
+        .filter((item) => item.available)
+        .map((item) => item.port);
+      if (available.length === 0) return null;
+      const [first, ...remaining] = available;
+      const params = new URLSearchParams({
+        migrate: "1",
+        remaining: remaining.join(","),
+        return: returnUrl,
+      });
+      return `http://localhost:${first}/?${params}`;
+    }
+
+    window.GridPersistence = { buildMigrationUrl, createClient };
+  })();
+  /* GRID_PERSISTENCE_END */
+  </script>
+  <script>
     const byId = (id) => document.getElementById(id);
     const money = new Intl.NumberFormat("zh-CN", {
       minimumFractionDigits: 2,

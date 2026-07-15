@@ -62,6 +62,18 @@ function loadValuation(overrides = {}) {
   return context.window.GridValuation;
 }
 
+function loadPersistence(overrides = {}) {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  const match = html.match(
+    /\/\* GRID_PERSISTENCE_START \*\/([\s\S]*?)\/\* GRID_PERSISTENCE_END \*\//,
+  );
+  assert.ok(match, "persistence block must be present");
+  const context = { window: {}, URL, URLSearchParams, ...overrides };
+  vm.createContext(context);
+  vm.runInContext(match[1], context);
+  return context.window.GridPersistence;
+}
+
 const savedInput = {
   startPrice: "8.3", stepPct: "5", maxDropPct: "40", fundingMode: "perGrid",
   amount: "10000", feePct: "0.1", profitRetentionMultiple: 2,
@@ -159,6 +171,64 @@ test("removes one saved code and serializes a version two envelope", () => {
     new Date("2026-07-14T10:00:00.000Z"));
   assert.deepEqual(Array.from(removeRecord([record], " 510500 ")), []);
   assert.equal(serializeStore([record]), JSON.stringify({ version: 2, records: [record] }));
+});
+
+test("loads and saves the version two strategy envelope through the API", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, options });
+    return {
+      ok: true,
+      json: async () => url === "/api/strategies"
+        ? { version: 2, records: [] }
+        : { version: 2, records: [{ code: "510500" }] },
+    };
+  };
+  const client = loadPersistence().createClient(fetchImpl);
+
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(await client.load())),
+    { version: 2, records: [] },
+  );
+  await client.save({ version: 2, records: [] });
+  assert.equal(calls[1].options.method, "PUT");
+  assert.equal(calls[1].options.headers["Content-Type"], "application/json");
+});
+
+test("surfaces public strategy API errors", async () => {
+  const client = loadPersistence().createClient(async () => ({
+    ok: false,
+    json: async () => ({
+      error: {
+        code: "STRATEGY_STORE_WRITE_FAILED",
+        message: "策略文件保存失败",
+      },
+    }),
+  }));
+
+  await assert.rejects(
+    () => client.save({ version: 2, records: [] }),
+    /策略文件保存失败/,
+  );
+});
+
+test("builds an ordered same-browser migration chain from available ports", () => {
+  const { buildMigrationUrl } = loadPersistence();
+
+  const url = buildMigrationUrl(
+    [
+      { port: 52341, available: true },
+      { port: 55018, available: true },
+    ],
+    "http://127.0.0.1:18765/",
+  );
+
+  assert.match(url, /^http:\/\/localhost:52341\/\?migrate=1/);
+  assert.match(decodeURIComponent(url), /remaining=55018/);
+  assert.match(
+    decodeURIComponent(url),
+    /return=http:\/\/127\.0\.0\.1:18765\//,
+  );
 });
 
 test("reproduces the article's arithmetic price grid", () => {
