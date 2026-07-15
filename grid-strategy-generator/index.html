@@ -164,7 +164,8 @@
     }
     .tool-column { grid-area: tool; min-width: 0; }
     .strategy-sidebar { grid-area: sidebar; position: sticky; top: 24px; }
-    .strategy-heading { margin-bottom: 12px; }
+    .strategy-heading { align-items: center; margin-bottom: 12px; }
+    .migration-button { min-height: 36px; padding: 6px 10px; font-size: 0.78rem; }
     .strategy-empty { margin: 0; color: var(--muted); font-size: 0.92rem; }
     .strategy-list { display: grid; gap: 10px; }
     .strategy-item {
@@ -449,6 +450,7 @@
       <aside class="panel strategy-sidebar" aria-labelledby="saved-strategy-title">
         <div class="section-heading strategy-heading">
           <h2 id="saved-strategy-title">已保存策略</h2>
+          <button id="migrate-strategies-button" class="preset-button migration-button" type="button">迁移旧策略</button>
         </div>
         <p id="saved-strategy-empty" class="strategy-empty">暂无已保存策略，生成方案后可保存。</p>
         <div id="saved-strategy-list" class="strategy-list" role="list"></div>
@@ -1188,6 +1190,7 @@
       timeStyle: "short",
     });
     const STRATEGY_STORAGE_KEY = "grid-strategy-generator.saved-strategies.v1";
+    const strategyPersistence = window.GridPersistence.createClient();
     const calculationFieldIds = new Set([
       "start-price",
       "step-pct",
@@ -1324,18 +1327,19 @@
       }));
     }
 
-    function loadSavedStrategies() {
+    async function loadSavedStrategies() {
       try {
+        const payload = await strategyPersistence.load();
         const parsed = window.GridStrategyStore.parseStore(
-          localStorage.getItem(STRATEGY_STORAGE_KEY),
+          JSON.stringify(payload),
         );
         savedStrategies = parsed.records;
         if (parsed.skippedCount > 0) {
-          setSaveStatus(`有 ${parsed.skippedCount} 条本地策略记录无法读取，已跳过。`, true);
+          setSaveStatus(`有 ${parsed.skippedCount} 条策略记录无法读取，已跳过。`, true);
         }
       } catch (error) {
         savedStrategies = [];
-        setSaveStatus(`无法读取本地策略：${error.message}`, true);
+        setSaveStatus(`无法读取策略文件：${error.message}`, true);
       }
       renderSavedStrategies();
     }
@@ -1362,7 +1366,7 @@
       if (record.code) valuationController.query(record.code);
     }
 
-    function deleteStrategy(record) {
+    async function deleteStrategy(record) {
       const confirmed = window.confirm(
         `确定删除“${record.symbol}”策略吗？已下载的 CSV 不会被删除。`,
       );
@@ -1370,15 +1374,15 @@
       const recordKey = window.GridStrategyStore.recordKey(record);
       const nextRecords = window.GridStrategyStore.removeRecord(savedStrategies, recordKey);
       try {
-        localStorage.setItem(STRATEGY_STORAGE_KEY,
-          window.GridStrategyStore.serializeStore(nextRecords),
+        await strategyPersistence.save(
+          JSON.parse(window.GridStrategyStore.serializeStore(nextRecords)),
         );
         savedStrategies = nextRecords;
         if (activeSavedSymbol === recordKey) activeSavedSymbol = null;
         renderSavedStrategies();
-        setSaveStatus(`已从左侧列表删除“${record.symbol}”。`);
+        setSaveStatus(`已从策略文件删除“${record.symbol}”。`);
       } catch (error) {
-        setSaveStatus(`删除失败：${error.message}`, true);
+        setSaveStatus(`策略文件删除失败：${error.message}`, true);
       }
     }
 
@@ -1575,7 +1579,7 @@
       downloadPlanCsv(symbol, resolvedName, latestPlan, snapshot);
     });
 
-    saveStrategyButton.addEventListener("click", () => {
+    saveStrategyButton.addEventListener("click", async () => {
       const symbolInput = byId("instrument-code");
       const symbol = symbolInput.value.trim();
       if (!/^\d{6}$/.test(symbol)) {
@@ -1612,30 +1616,94 @@
       }
 
       try {
-        localStorage.setItem(STRATEGY_STORAGE_KEY,
-          window.GridStrategyStore.serializeStore(nextRecords),
+        await strategyPersistence.save(
+          JSON.parse(window.GridStrategyStore.serializeStore(nextRecords)),
         );
         savedStrategies = nextRecords;
         activeSavedSymbol = window.GridStrategyStore.recordKey(record);
         renderSavedStrategies();
         indexSaved = true;
       } catch (error) {
-        console.error("Strategy index save failed", error);
+        console.error("Strategy file save failed", error);
       }
 
       if (csvSaved && indexSaved) {
-        setSaveStatus("策略已保存到左侧列表，CSV 已下载。");
+        setSaveStatus("策略已保存到文件，CSV 已下载。");
       } else if (csvSaved) {
-        setSaveStatus("CSV 已下载，但左侧列表保存失败。", true);
+        setSaveStatus("CSV 已下载，但策略文件保存失败。", true);
       } else if (indexSaved) {
-        setSaveStatus("策略已保存到左侧列表，但 CSV 下载失败。", true);
+        setSaveStatus("策略已保存到文件，但 CSV 下载失败。", true);
       } else {
-        setSaveStatus("策略保存失败，CSV 和左侧列表均未保存。", true);
+        setSaveStatus("策略保存失败，CSV 和策略文件均未保存。", true);
       }
     });
 
-    renderValuationState({ kind: "empty", code: "" });
-    loadSavedStrategies();
+    async function runLegacyMigration() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("migrate") !== "1") return false;
+      const returnUrl = params.get("return") || "";
+      const remaining = (params.get("remaining") || "")
+        .split(",")
+        .filter(Boolean);
+      const parsed = window.GridStrategyStore.parseStore(
+        localStorage.getItem(STRATEGY_STORAGE_KEY),
+      );
+      try {
+        const result = await strategyPersistence.importLegacy(
+          JSON.parse(window.GridStrategyStore.serializeStore(parsed.records)),
+        );
+        const next = remaining.shift();
+        if (next) {
+          const nextParams = new URLSearchParams({
+            migrate: "1",
+            remaining: remaining.join(","),
+            return: returnUrl,
+          });
+          window.location.replace(`http://localhost:${next}/?${nextParams}`);
+        } else {
+          const target = new URL(returnUrl);
+          if (!["127.0.0.1", "localhost"].includes(target.hostname)) {
+            throw new Error("迁移返回地址无效");
+          }
+          target.searchParams.set("migration", JSON.stringify({
+            ...result,
+            skippedInvalid: parsed.skippedCount,
+          }));
+          window.location.replace(target.toString());
+        }
+      } catch (error) {
+        setSaveStatus(`旧策略迁移失败：${error.message}`, true);
+      }
+      return true;
+    }
+
+    byId("migrate-strategies-button").addEventListener("click", async () => {
+      try {
+        const status = await strategyPersistence.migrationStatus();
+        const target = window.GridPersistence.buildMigrationUrl(
+          status.ports,
+          window.location.origin + window.location.pathname,
+        );
+        if (!target) {
+          setSaveStatus("历史端口当前不可用，无法迁移旧策略。", true);
+          return;
+        }
+        window.location.assign(target);
+      } catch (error) {
+        setSaveStatus(`无法开始旧策略迁移：${error.message}`, true);
+      }
+    });
+
+    (async () => {
+      renderValuationState({ kind: "empty", code: "" });
+      if (await runLegacyMigration()) return;
+      await loadSavedStrategies();
+      const params = new URLSearchParams(window.location.search);
+      if (params.has("migration")) {
+        setSaveStatus("旧策略迁移完成，已刷新统一策略文件。");
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    })();
   </script>
 </body>
 </html>

@@ -781,10 +781,11 @@ test("keeps form controls before saved-strategy actions in keyboard order", () =
   assert.match(html, /@media \(max-width: 900px\)[\s\S]*?grid-template-areas:\s*"tool"\s*"sidebar"/);
 });
 
-test("wires local save, reload, overwrite, and confirmed delete behavior", () => {
+test("wires file save, reload, overwrite, and confirmed delete behavior", () => {
   const html = fs.readFileSync(htmlPath, "utf8");
   assert.match(html, /localStorage\.getItem\(STRATEGY_STORAGE_KEY\)/);
-  assert.match(html, /localStorage\.setItem\(STRATEGY_STORAGE_KEY/);
+  assert.match(html, /strategyPersistence\.load\(\)/);
+  assert.match(html, /strategyPersistence\.save\(/);
   assert.match(html, /window\.confirm\(/);
   assert.match(html, /requestSubmit\(\)/);
   assert.match(html, /GridStrategyStore\.upsertRecord/);
@@ -900,4 +901,31 @@ test("loads saved valuation snapshots before refreshing valid codes", () => {
   assert.match(html, /valuationController\.query\(record\.code\)/);
   assert.match(html, /历史策略未保存代码，请补充 6 位代码/);
   assert.match(html, /currentValuation\?\.isSnapshot/);
+});
+
+test("uses file persistence for normal load save and delete", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+
+  assert.match(
+    html,
+    /const strategyPersistence = window\.GridPersistence\.createClient/,
+  );
+  assert.match(html, /await strategyPersistence\.load\(\)/);
+  assert.match(html, /await strategyPersistence\.save\(/);
+  assert.doesNotMatch(
+    html,
+    /localStorage\.setItem\(STRATEGY_STORAGE_KEY/,
+  );
+});
+
+test("contains an idempotent legacy strategy migration action", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+
+  assert.match(html, /id=["']migrate-strategies-button["']/);
+  assert.match(
+    html,
+    /localStorage\.getItem\(STRATEGY_STORAGE_KEY\)/,
+  );
+  assert.match(html, /strategyPersistence\.importLegacy/);
+  assert.match(html, /window\.location\.replace/);
 });
