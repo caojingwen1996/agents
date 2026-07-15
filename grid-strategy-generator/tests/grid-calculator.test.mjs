@@ -545,8 +545,14 @@ test("exports retention settings, completion summary, and retained rows", () => 
   assert.match(csv, /留利润策略,留 2 份利润/);
   assert.match(csv, /每档完成一轮后,数值/);
   assert.match(csv, /累计留存份额/);
-  assert.match(csv, /序号,档位,买入价格,卖出价格,买入数量,买入金额,卖出数量,卖出回款,留存数量,留存市值,现金盈亏,综合利润/);
-  assert.match(csv, /1,1\.000,1\.000,1\.050,10000,10000\.00,9100,9555\.00,900,945\.00,-445\.00,500\.00/);
+  assert.match(
+    csv,
+    /序号,档位,买入价格,卖出价格,买入数量,买入金额,卖出数量,卖出回款,留存数量,留存市值,现金盈亏,综合利润,现金收益率,综合收益率/,
+  );
+  assert.match(
+    csv,
+    /1,1\.000,1\.000,1\.050,10000,10000\.00,9100,9555\.00,900,945\.00,-445\.00,500\.00,-4\.45%,5\.00%/,
+  );
 });
 
 test("contains a responsive saved-strategy sidebar and save feedback", () => {

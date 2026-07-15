@@ -683,7 +683,7 @@
           ["累计现金盈亏", result.completion.totalCashPnl.toFixed(2)],
           ["累计综合利润", result.completion.totalCombinedProfit.toFixed(2)],
           [],
-          ["序号", "档位", "买入价格", "卖出价格", "买入数量", "买入金额", "卖出数量", "卖出回款", "留存数量", "留存市值", "现金盈亏", "综合利润"],
+          ["序号", "档位", "买入价格", "卖出价格", "买入数量", "买入金额", "卖出数量", "卖出回款", "留存数量", "留存市值", "现金盈亏", "综合利润", "现金收益率", "综合收益率"],
           ...result.levels.map((row) => [
             row.index,
             row.buyPrice.toFixed(3),
@@ -697,6 +697,8 @@
             row.retainedMarketValue.toFixed(2),
             row.cashPnl.toFixed(2),
             row.combinedProfit.toFixed(2),
+            `${row.cashReturnPct.toFixed(2)}%`,
+            `${row.combinedReturnPct.toFixed(2)}%`,
           ]),
         );
       } else {
