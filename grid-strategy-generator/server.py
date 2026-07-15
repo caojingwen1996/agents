@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import functools
 import json
+import threading
 import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -22,6 +23,7 @@ from valuation_sources import (
 
 HOST = "127.0.0.1"
 PREFERRED_PORTS = tuple(range(18765, 18775))
+MIGRATION_PORTS = (52341, 55018)
 HERE = Path(__file__).resolve().parent
 MAX_STRATEGY_BODY_BYTES = 2_000_000
 STRATEGY_STORE_PATH = HERE / "data" / "saved-strategies.json"
@@ -161,16 +163,51 @@ def create_available_server(
     host: str = HOST,
     ports=PREFERRED_PORTS,
     server_factory=create_server,
+    strategy_store: StrategyFileStore | None = None,
+    migration_status: dict[int, bool] | None = None,
 ) -> ThreadingHTTPServer:
     last_error = None
     for port in ports:
         try:
-            return server_factory(service, directory, host=host, port=port)
+            options = {"host": host, "port": port}
+            if strategy_store is not None:
+                options["strategy_store"] = strategy_store
+            if migration_status is not None:
+                options["migration_status"] = migration_status
+            return server_factory(service, directory, **options)
         except OSError as error:
             last_error = error
     if last_error is not None:
         raise last_error
     raise RuntimeError("没有配置可用的本地端口")
+
+
+def create_migration_servers(
+    service: Any,
+    directory: Path,
+    strategy_store: StrategyFileStore,
+    *,
+    ports=MIGRATION_PORTS,
+    server_factory=create_server,
+):
+    servers = []
+    shared_status = {port: False for port in ports}
+    for port in ports:
+        try:
+            server = server_factory(
+                service,
+                directory,
+                strategy_store=strategy_store,
+                migration_status=shared_status,
+                host=HOST,
+                port=port,
+            )
+        except OSError:
+            shared_status[port] = False
+        else:
+            servers.append(server)
+            shared_status[port] = True
+    return servers, shared_status
 
 
 def build_service() -> ValuationService:
@@ -185,7 +222,24 @@ def main():
     parser = argparse.ArgumentParser(description="网格策略本地服务")
     parser.add_argument("--open-browser", action="store_true")
     args = parser.parse_args()
-    server = create_available_server(build_service())
+    strategy_store = StrategyFileStore(STRATEGY_STORE_PATH)
+    service = build_service()
+    migration_servers, migration_status = create_migration_servers(
+        service,
+        HERE,
+        strategy_store,
+    )
+    threads = [
+        threading.Thread(target=item.serve_forever, daemon=True)
+        for item in migration_servers
+    ]
+    for thread in threads:
+        thread.start()
+    server = create_available_server(
+        service,
+        strategy_store=strategy_store,
+        migration_status=migration_status,
+    )
     url = f"http://{HOST}:{server.server_port}/"
     print(f"网格策略工具：{url}")
     if args.open_browser:
@@ -196,6 +250,11 @@ def main():
         pass
     finally:
         server.server_close()
+        for item in migration_servers:
+            item.shutdown()
+            item.server_close()
+        for thread in threads:
+            thread.join(timeout=2)
 
 
 if __name__ == "__main__":

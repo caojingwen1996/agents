@@ -10,7 +10,12 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_DIR))
 
-from server import HOST, create_available_server, create_server  # noqa: E402
+from server import (  # noqa: E402
+    HOST,
+    create_available_server,
+    create_migration_servers,
+    create_server,
+)
 from strategy_file_store import StrategyFileStore  # noqa: E402
 from valuation_service import ValuationError  # noqa: E402
 
@@ -138,6 +143,28 @@ class ServerTests(unittest.TestCase):
 
         self.assertIs(result, available)
         self.assertEqual(calls, [18765, 18766])
+
+    def test_migration_servers_keep_partial_success(self):
+        calls = []
+        working = object()
+
+        def factory(service, directory, **kwargs):
+            calls.append(kwargs["port"])
+            if kwargs["port"] == 52341:
+                raise OSError("occupied")
+            return working
+
+        servers, status = create_migration_servers(
+            self.service,
+            PROJECT_DIR,
+            self.strategy_store,
+            ports=[52341, 55018],
+            server_factory=factory,
+        )
+
+        self.assertEqual(servers, [working])
+        self.assertEqual(status, {52341: False, 55018: True})
+        self.assertEqual(calls, [52341, 55018])
 
     def test_strategy_api_reads_and_writes_file_store(self):
         status, _, _ = self.request("PUT", "/api/strategies", strategy_envelope())
