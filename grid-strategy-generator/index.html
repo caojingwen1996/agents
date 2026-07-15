@@ -38,7 +38,7 @@
     button { touch-action: manipulation; }
 
     .page-shell {
-      width: min(1180px, calc(100% - 32px));
+      width: min(1480px, calc(100% - 32px));
       margin: 0 auto;
       padding: 48px 0 72px;
     }
@@ -142,6 +142,70 @@
     .primary-button:hover { background: var(--accent-strong); }
     .primary-button:active { box-shadow: none; }
 
+    .app-layout {
+      display: grid;
+      grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+      align-items: start;
+      gap: 24px;
+    }
+    .tool-column { min-width: 0; }
+    .strategy-sidebar { position: sticky; top: 24px; }
+    .strategy-heading { margin-bottom: 12px; }
+    .strategy-empty { margin: 0; color: var(--muted); font-size: 0.92rem; }
+    .strategy-list { display: grid; gap: 10px; }
+    .strategy-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 58px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fbfdfd;
+    }
+    .strategy-item.is-active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+    .strategy-item.is-active .strategy-load strong { font-weight: 800; }
+    .strategy-load, .strategy-delete {
+      min-height: 52px;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+    .strategy-load { padding: 10px 12px; text-align: left; color: var(--ink); }
+    .strategy-load strong, .strategy-load time { display: block; }
+    .strategy-load time { margin-top: 2px; color: var(--muted); font-size: 0.78rem; }
+    .strategy-delete {
+      border-left: 1px solid var(--line);
+      color: var(--loss);
+      font-size: 0.8rem;
+      font-weight: 800;
+    }
+    .strategy-load:hover, .strategy-delete:hover { background: rgba(15, 107, 91, 0.07); }
+    .form-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .form-actions .primary-button { margin-top: 0; }
+    .secondary-button {
+      min-height: 48px;
+      padding: 11px 18px;
+      border: 1px solid #a9cfc5;
+      border-radius: 10px;
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .secondary-button:hover:not(:disabled) { background: #d6ebe5; }
+    .secondary-button:disabled { cursor: not-allowed; opacity: 0.48; }
+    .save-status { margin: 12px 0 0; color: var(--muted); font-weight: 650; }
+    .save-status.is-error { color: var(--loss); }
+
     .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
     .metric {
       min-width: 0;
@@ -190,6 +254,11 @@
     .disclaimer { margin: 24px 2px 0; color: var(--muted); font-size: 0.82rem; }
     [hidden] { display: none !important; }
 
+    @media (max-width: 900px) {
+      .app-layout { grid-template-columns: 1fr; }
+      .strategy-sidebar { position: static; }
+    }
+
     @media (max-width: 820px) {
       .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
@@ -200,7 +269,8 @@
       .panel { padding: 18px; border-radius: 14px; }
       .section-heading { display: block; }
       .section-heading p { margin-top: 6px; }
-      .primary-button { width: 100%; }
+      .form-actions { align-items: stretch; flex-direction: column; }
+      .form-actions .primary-button, .form-actions .secondary-button { width: 100%; }
       .plan-toolbar { align-items: stretch; flex-direction: column; }
     }
   </style>
@@ -212,6 +282,16 @@
       <h1>网格策略 1.0<br>计划生成器</h1>
       <p class="hero-copy">手工设定参数，先查看资金压力，再查看每一档买卖计划。所有计算仅在当前浏览器中完成。</p>
     </header>
+
+    <div class="app-layout">
+      <aside class="panel strategy-sidebar" aria-labelledby="saved-strategy-title">
+        <div class="section-heading strategy-heading">
+          <h2 id="saved-strategy-title">已保存策略</h2>
+        </div>
+        <p id="saved-strategy-empty" class="strategy-empty">暂无已保存策略，生成方案后可保存。</p>
+        <div id="saved-strategy-list" class="strategy-list" role="list"></div>
+      </aside>
+      <div id="tool-column" class="tool-column">
 
     <section class="panel" aria-labelledby="parameter-title">
       <div class="section-heading">
@@ -264,7 +344,11 @@
           <button class="preset-button" type="button" data-step="10">高波动 10%</button>
         </div>
         <p id="error-message" class="error" role="alert" tabindex="-1" hidden></p>
-        <button class="primary-button" type="submit">生成网格计划</button>
+        <div class="form-actions">
+          <button class="primary-button" type="submit">生成网格计划</button>
+          <button id="save-strategy-button" class="secondary-button" type="button" disabled>保存策略</button>
+        </div>
+        <p id="save-status" class="save-status" aria-live="polite" hidden></p>
       </form>
     </section>
 
@@ -308,6 +392,8 @@
     </section>
 
     <p class="disclaimer">本工具只按输入参数生成网格计划，不判断标的价值、未来走势或策略适用性，不构成投资建议。</p>
+      </div>
+    </div>
   </main>
   <script>
   /* GRID_CALCULATOR_START */
@@ -620,13 +706,270 @@
   /* GRID_EXPORT_END */
   </script>
   <script>
+  /* GRID_STRATEGY_STORE_START */
+  (() => {
+    const STORE_VERSION = 1;
+    const ALLOWED_FUNDING_MODES = new Set(["total", "perGrid"]);
+    const ALLOWED_RETENTION_MULTIPLES = new Set([0, 1, 2, 3]);
+
+    function normalizeInput(input) {
+      const normalized = {
+        startPrice: String(input?.startPrice ?? ""),
+        stepPct: String(input?.stepPct ?? ""),
+        maxDropPct: String(input?.maxDropPct ?? ""),
+        fundingMode: String(input?.fundingMode ?? ""),
+        amount: String(input?.amount ?? ""),
+        feePct: String(input?.feePct ?? "0"),
+        profitRetentionMultiple: Number(input?.profitRetentionMultiple),
+      };
+      const startPrice = Number(normalized.startPrice);
+      const stepPct = Number(normalized.stepPct);
+      const maxDropPct = Number(normalized.maxDropPct);
+      const amount = Number(normalized.amount);
+      const feePct = Number(normalized.feePct);
+      if (
+        !Number.isFinite(startPrice)
+        || startPrice <= 0
+        || !Number.isFinite(stepPct)
+        || stepPct <= 0
+        || stepPct >= 100
+        || !Number.isFinite(maxDropPct)
+        || maxDropPct <= 0
+        || maxDropPct >= 100
+        || !Number.isFinite(amount)
+        || amount <= 0
+        || !Number.isFinite(feePct)
+        || feePct < 0
+        || !ALLOWED_FUNDING_MODES.has(normalized.fundingMode)
+        || !ALLOWED_RETENTION_MULTIPLES.has(normalized.profitRetentionMultiple)
+      ) {
+        throw new Error("保存的策略参数无效");
+      }
+      return normalized;
+    }
+
+    function createRecord(symbol, input, savedAt = new Date()) {
+      const normalizedSymbol = String(symbol ?? "").trim();
+      if (!normalizedSymbol) throw new Error("标的名称不能为空");
+      const isoTime = savedAt instanceof Date
+        ? savedAt.toISOString()
+        : new Date(savedAt).toISOString();
+      return {
+        version: STORE_VERSION,
+        symbol: normalizedSymbol,
+        savedAt: isoTime,
+        input: normalizeInput(input),
+      };
+    }
+
+    function normalizeRecord(record) {
+      if (record?.version !== STORE_VERSION) throw new Error("保存记录版本无效");
+      return createRecord(record.symbol, record.input, record.savedAt);
+    }
+
+    function sortNewestFirst(records) {
+      return [...records].sort((left, right) => right.savedAt.localeCompare(left.savedAt));
+    }
+
+    function upsertRecord(records, record) {
+      const normalized = normalizeRecord(record);
+      return sortNewestFirst([
+        ...records.filter((item) => item.symbol !== normalized.symbol),
+        normalized,
+      ]);
+    }
+
+    function removeRecord(records, symbol) {
+      const normalizedSymbol = String(symbol ?? "").trim();
+      return records.filter((record) => record.symbol !== normalizedSymbol);
+    }
+
+    function parseStore(raw) {
+      if (!raw) return { records: [], skippedCount: 0 };
+      let envelope;
+      try {
+        envelope = JSON.parse(raw);
+      } catch {
+        return { records: [], skippedCount: 1 };
+      }
+      if (envelope?.version !== STORE_VERSION || !Array.isArray(envelope.records)) {
+        return { records: [], skippedCount: 1 };
+      }
+      const records = [];
+      let skippedCount = 0;
+      for (const candidate of envelope.records) {
+        try {
+          const record = normalizeRecord(candidate);
+          const existingIndex = records.findIndex((item) => item.symbol === record.symbol);
+          if (existingIndex >= 0) records.splice(existingIndex, 1);
+          records.push(record);
+        } catch {
+          skippedCount += 1;
+        }
+      }
+      return { records: sortNewestFirst(records), skippedCount };
+    }
+
+    function serializeStore(records) {
+      return JSON.stringify({ version: STORE_VERSION, records: records.map(normalizeRecord) });
+    }
+
+    window.GridStrategyStore = {
+      STORE_VERSION,
+      createRecord,
+      parseStore,
+      removeRecord,
+      serializeStore,
+      upsertRecord,
+    };
+  })();
+  /* GRID_STRATEGY_STORE_END */
+  </script>
+  <script>
     const byId = (id) => document.getElementById(id);
     const money = new Intl.NumberFormat("zh-CN", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
     const integer = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
+    const savedAtFormatter = new Intl.DateTimeFormat("zh-CN", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
+    const STRATEGY_STORAGE_KEY = "grid-strategy-generator.saved-strategies.v1";
+    const calculationFieldIds = new Set([
+      "symbol-name",
+      "start-price",
+      "step-pct",
+      "max-drop-pct",
+      "funding-mode",
+      "funding-amount",
+      "fee-pct",
+      "profit-retention",
+    ]);
+    const saveStrategyButton = byId("save-strategy-button");
     let latestPlan = null;
+    let savedStrategies = [];
+    let activeSavedSymbol = null;
+    let planIsCurrent = false;
+
+    function setSaveStatus(message, isError = false) {
+      const status = byId("save-status");
+      status.textContent = message;
+      status.classList.toggle("is-error", isError);
+      status.hidden = !message;
+    }
+
+    function setPlanCurrent(isCurrent) {
+      planIsCurrent = isCurrent;
+      saveStrategyButton.disabled = !planIsCurrent;
+    }
+
+    function updateFundingLabel() {
+      byId("funding-label").textContent = byId("funding-mode").value === "total"
+        ? "总资金（元）"
+        : "每格金额（元）";
+    }
+
+    function downloadPlanCsv(symbol, plan) {
+      const csv = window.GridExporter.buildGridCsv(plan.input, plan.result);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      try {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = window.GridExporter.createExportFilename(symbol);
+        document.body.append(link);
+        link.click();
+        link.remove();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    function renderSavedStrategies() {
+      const list = byId("saved-strategy-list");
+      byId("saved-strategy-empty").hidden = savedStrategies.length > 0;
+      list.replaceChildren(...savedStrategies.map((record) => {
+        const item = document.createElement("div");
+        item.className = "strategy-item";
+        item.classList.toggle("is-active", record.symbol === activeSavedSymbol);
+        item.setAttribute("role", "listitem");
+
+        const loadButton = document.createElement("button");
+        loadButton.type = "button";
+        loadButton.className = "strategy-load";
+        loadButton.setAttribute("aria-label", `载入 ${record.symbol} 策略`);
+        loadButton.addEventListener("click", () => loadStrategy(record));
+        const name = document.createElement("strong");
+        name.textContent = record.symbol;
+        const savedAt = document.createElement("time");
+        savedAt.dateTime = record.savedAt;
+        savedAt.textContent = savedAtFormatter.format(new Date(record.savedAt));
+        loadButton.append(name, savedAt);
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "strategy-delete";
+        deleteButton.textContent = "删除";
+        deleteButton.setAttribute("aria-label", `删除 ${record.symbol} 策略`);
+        deleteButton.addEventListener("click", () => deleteStrategy(record));
+
+        item.append(loadButton, deleteButton);
+        return item;
+      }));
+    }
+
+    function loadSavedStrategies() {
+      try {
+        const parsed = window.GridStrategyStore.parseStore(
+          localStorage.getItem(STRATEGY_STORAGE_KEY),
+        );
+        savedStrategies = parsed.records;
+        if (parsed.skippedCount > 0) {
+          setSaveStatus(`有 ${parsed.skippedCount} 条本地策略记录无法读取，已跳过。`, true);
+        }
+      } catch (error) {
+        savedStrategies = [];
+        setSaveStatus(`无法读取本地策略：${error.message}`, true);
+      }
+      renderSavedStrategies();
+    }
+
+    function loadStrategy(record) {
+      byId("symbol-name").value = record.symbol;
+      byId("start-price").value = record.input.startPrice;
+      byId("step-pct").value = record.input.stepPct;
+      byId("max-drop-pct").value = record.input.maxDropPct;
+      byId("funding-mode").value = record.input.fundingMode;
+      byId("funding-amount").value = record.input.amount;
+      byId("fee-pct").value = record.input.feePct;
+      byId("profit-retention").value = String(record.input.profitRetentionMultiple);
+      updateFundingLabel();
+      activeSavedSymbol = record.symbol;
+      renderSavedStrategies();
+      setSaveStatus("");
+      byId("grid-form").requestSubmit();
+    }
+
+    function deleteStrategy(record) {
+      const confirmed = window.confirm(
+        `确定删除“${record.symbol}”策略吗？已下载的 CSV 不会被删除。`,
+      );
+      if (!confirmed) return;
+      const nextRecords = window.GridStrategyStore.removeRecord(savedStrategies, record.symbol);
+      try {
+        localStorage.setItem(STRATEGY_STORAGE_KEY,
+          window.GridStrategyStore.serializeStore(nextRecords),
+        );
+        savedStrategies = nextRecords;
+        if (activeSavedSymbol === record.symbol) activeSavedSymbol = null;
+        renderSavedStrategies();
+        setSaveStatus(`已从左侧列表删除“${record.symbol}”。`);
+      } catch (error) {
+        setSaveStatus(`删除失败：${error.message}`, true);
+      }
+    }
 
     function metric(label, value, tone = "") {
       const item = document.createElement("div");
@@ -738,15 +1081,25 @@
       byId("results").hidden = false;
     }
 
-    byId("funding-mode").addEventListener("change", (event) => {
-      byId("funding-label").textContent = event.target.value === "total"
-        ? "总资金（元）"
-        : "每格金额（元）";
-    });
+    byId("funding-mode").addEventListener("change", updateFundingLabel);
 
     for (const button of document.querySelectorAll("[data-step]")) {
       button.addEventListener("click", () => {
         byId("step-pct").value = button.dataset.step;
+        setPlanCurrent(false);
+        setSaveStatus(latestPlan ? "参数已修改，请重新生成后再保存。" : "");
+      });
+    }
+
+    for (const eventName of ["input", "change"]) {
+      byId("grid-form").addEventListener(eventName, (event) => {
+        if (!calculationFieldIds.has(event.target.id)) return;
+        setPlanCurrent(false);
+        setSaveStatus(latestPlan ? "参数已修改，请重新生成后再保存。" : "");
+        if (event.target.id === "symbol-name") {
+          activeSavedSymbol = null;
+          renderSavedStrategies();
+        }
       });
     }
 
@@ -768,8 +1121,11 @@
         const result = window.GridCalculator.calculateGrid(input);
         latestPlan = { input: { ...input }, result };
         renderResult(result);
+        setPlanCurrent(true);
+        setSaveStatus("");
       } catch (error) {
         byId("results").hidden = true;
+        setPlanCurrent(false);
         errorBox.textContent = `${error.message}，请修改参数后重新生成。`;
         errorBox.hidden = false;
         errorBox.focus();
@@ -790,17 +1146,62 @@
       }
 
       errorBox.hidden = true;
-      const csv = window.GridExporter.buildGridCsv(latestPlan.input, latestPlan.result);
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = window.GridExporter.createExportFilename(symbol);
-      document.body.append(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      downloadPlanCsv(symbol, latestPlan);
     });
+
+    saveStrategyButton.addEventListener("click", () => {
+      const symbolInput = byId("symbol-name");
+      const symbol = symbolInput.value.trim();
+      if (!symbol) {
+        setSaveStatus("请填写标的名称并重新生成网格计划。", true);
+        symbolInput.focus();
+        return;
+      }
+      if (!latestPlan) {
+        setSaveStatus("请先生成网格计划。", true);
+        return;
+      }
+      if (!planIsCurrent) {
+        setSaveStatus("参数已修改，请重新生成后再保存。", true);
+        return;
+      }
+
+      const record = window.GridStrategyStore.createRecord(symbol, latestPlan.input, new Date());
+      const nextRecords = window.GridStrategyStore.upsertRecord(savedStrategies, record);
+      let csvSaved = false;
+      let indexSaved = false;
+
+      try {
+        downloadPlanCsv(symbol, latestPlan);
+        csvSaved = true;
+      } catch (error) {
+        console.error("CSV download failed", error);
+      }
+
+      try {
+        localStorage.setItem(STRATEGY_STORAGE_KEY,
+          window.GridStrategyStore.serializeStore(nextRecords),
+        );
+        savedStrategies = nextRecords;
+        activeSavedSymbol = symbol;
+        renderSavedStrategies();
+        indexSaved = true;
+      } catch (error) {
+        console.error("Strategy index save failed", error);
+      }
+
+      if (csvSaved && indexSaved) {
+        setSaveStatus("策略已保存到左侧列表，CSV 已下载。");
+      } else if (csvSaved) {
+        setSaveStatus("CSV 已下载，但左侧列表保存失败。", true);
+      } else if (indexSaved) {
+        setSaveStatus("策略已保存到左侧列表，但 CSV 下载失败。", true);
+      } else {
+        setSaveStatus("策略保存失败，CSV 和左侧列表均未保存。", true);
+      }
+    });
+
+    loadSavedStrategies();
   </script>
 </body>
 </html>

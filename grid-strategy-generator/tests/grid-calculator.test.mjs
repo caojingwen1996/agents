@@ -32,6 +32,106 @@ function loadExporter() {
   return context.window.GridExporter;
 }
 
+function loadStrategyStore() {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  const match = html.match(
+    /\/\* GRID_STRATEGY_STORE_START \*\/([\s\S]*?)\/\* GRID_STRATEGY_STORE_END \*\//,
+  );
+  assert.ok(match, "strategy store block must be present");
+  const context = { window: {} };
+  vm.createContext(context);
+  vm.runInContext(match[1], context);
+  return context.window.GridStrategyStore;
+}
+
+test("creates normalized versioned strategy records", () => {
+  const { createRecord } = loadStrategyStore();
+  const record = createRecord("  159198 港芯  ", {
+    startPrice: "8.3",
+    stepPct: "5",
+    maxDropPct: "40",
+    fundingMode: "perGrid",
+    amount: "10000",
+    feePct: "0.1",
+    profitRetentionMultiple: 2,
+  }, new Date("2026-07-14T10:20:30.000Z"));
+
+  assert.deepEqual(JSON.parse(JSON.stringify(record)), {
+    version: 1,
+    symbol: "159198 港芯",
+    savedAt: "2026-07-14T10:20:30.000Z",
+    input: {
+      startPrice: "8.3",
+      stepPct: "5",
+      maxDropPct: "40",
+      fundingMode: "perGrid",
+      amount: "10000",
+      feePct: "0.1",
+      profitRetentionMultiple: 2,
+    },
+  });
+});
+
+test("upserts saved strategies by exact trimmed symbol and sorts newest first", () => {
+  const { createRecord, upsertRecord } = loadStrategyStore();
+  const older = createRecord("港芯", {
+    startPrice: "8", stepPct: "5", maxDropPct: "20", fundingMode: "total",
+    amount: "90000", feePct: "0", profitRetentionMultiple: 0,
+  }, new Date("2026-07-14T09:00:00.000Z"));
+  const newer = createRecord("有色", {
+    startPrice: "1", stepPct: "5", maxDropPct: "30", fundingMode: "perGrid",
+    amount: "10000", feePct: "0", profitRetentionMultiple: 1,
+  }, new Date("2026-07-14T10:00:00.000Z"));
+  const replacement = createRecord("港芯", {
+    startPrice: "8.3", stepPct: "10", maxDropPct: "40", fundingMode: "perGrid",
+    amount: "12000", feePct: "0.1", profitRetentionMultiple: 2,
+  }, new Date("2026-07-14T11:00:00.000Z"));
+
+  const records = upsertRecord(upsertRecord([older], newer), replacement);
+  assert.deepEqual(Array.from(records, (record) => record.symbol), ["港芯", "有色"]);
+  assert.equal(records[0].input.startPrice, "8.3");
+});
+
+test("parses valid saved records while skipping damaged data", () => {
+  const { parseStore } = loadStrategyStore();
+  const good = {
+    version: 1,
+    symbol: "港芯",
+    savedAt: "2026-07-14T10:00:00.000Z",
+    input: {
+      startPrice: "8.3", stepPct: "5", maxDropPct: "40", fundingMode: "perGrid",
+      amount: "10000", feePct: "0", profitRetentionMultiple: 0,
+    },
+  };
+
+  assert.deepEqual(JSON.parse(JSON.stringify(parseStore("not json"))), {
+    records: [], skippedCount: 1,
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(parseStore(JSON.stringify({
+    version: 1,
+    records: [
+      good,
+      { ...good, symbol: "" },
+      { ...good, symbol: "bad-price", input: { ...good.input, startPrice: "garbage" } },
+      { ...good, symbol: "bad-step", input: { ...good.input, stepPct: "999" } },
+      { ...good, symbol: "bad-amount", input: { ...good.input, amount: "-1" } },
+      { ...good, symbol: "bad-fee", input: { ...good.input, feePct: "not-a-number" } },
+    ],
+  })))), {
+    records: [good], skippedCount: 5,
+  });
+});
+
+test("removes one saved symbol and serializes the versioned envelope", () => {
+  const { createRecord, removeRecord, serializeStore } = loadStrategyStore();
+  const record = createRecord("港芯", {
+    startPrice: "8.3", stepPct: "5", maxDropPct: "40", fundingMode: "perGrid",
+    amount: "10000", feePct: "0", profitRetentionMultiple: 0,
+  }, new Date("2026-07-14T10:00:00.000Z"));
+  assert.deepEqual(Array.from(removeRecord([record], " 港芯 ")), []);
+  assert.equal(serializeStore([record]), JSON.stringify({ version: 1, records: [record] }));
+});
+
 test("reproduces the article's arithmetic price grid", () => {
   const { calculateGrid } = loadCalculator();
   const result = calculateGrid({
@@ -422,4 +522,33 @@ test("exports retention settings, completion summary, and retained rows", () => 
   assert.match(csv, /累计留存份额/);
   assert.match(csv, /序号,档位,买入价格,卖出价格,买入数量,买入金额,卖出数量,卖出回款,留存数量,留存市值,现金盈亏,综合利润/);
   assert.match(csv, /1,1\.000,1\.000,1\.050,10000,10000\.00,9100,9555\.00,900,945\.00,-445\.00,500\.00/);
+});
+
+test("contains a responsive saved-strategy sidebar and save feedback", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  for (const id of [
+    "saved-strategy-list",
+    "saved-strategy-empty",
+    "save-strategy-button",
+    "save-status",
+    "tool-column",
+  ]) {
+    assert.match(html, new RegExp(`id=["']${id}["']`));
+  }
+  assert.match(html, /class=["'][^"']*app-layout/);
+  assert.match(html, /aria-live=["']polite["']/);
+  assert.match(html, /@media \(max-width: 900px\)/);
+  assert.match(html, /\.strategy-item\.is-active \.strategy-load strong\s*{[^}]*font-weight:\s*800/);
+});
+
+test("wires local save, reload, overwrite, and confirmed delete behavior", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  assert.match(html, /localStorage\.getItem\(STRATEGY_STORAGE_KEY\)/);
+  assert.match(html, /localStorage\.setItem\(STRATEGY_STORAGE_KEY/);
+  assert.match(html, /window\.confirm\(/);
+  assert.match(html, /requestSubmit\(\)/);
+  assert.match(html, /GridStrategyStore\.upsertRecord/);
+  assert.match(html, /GridStrategyStore\.removeRecord/);
+  assert.match(html, /GridExporter\.buildGridCsv/);
+  assert.match(html, /saveStrategyButton\.disabled = !planIsCurrent/);
 });
