@@ -1048,7 +1048,7 @@
       }
 
       const headers = retentionEnabled
-        ? ["档位", "买入价", "卖出价", "买入数量", "实际买入金额", "卖出数量", "卖出回款", "留存数量", "留存市值", "现金盈亏", "综合利润"]
+        ? ["档位", "买入价", "卖出价", "买入数量", "实际买入金额", "卖出数量", "卖出回款", "留存数量", "留存市值", "现金盈亏", "综合利润", "现金收益率", "综合收益率"]
         : ["档位", "买入价", "卖出价", "计划预算", "数量", "实际买入金额", "卖出金额", "税费前利润", "税费后利润", "净收益率"];
       byId("grid-table-head").replaceChildren(...headers.map((label) => {
         const th = document.createElement("th");
@@ -1073,6 +1073,8 @@
             money.format(row.retainedMarketValue),
             money.format(row.cashPnl),
             money.format(row.combinedProfit),
+            `${row.cashReturnPct.toFixed(2)}%`,
+            `${row.combinedReturnPct.toFixed(2)}%`,
           ]
           : [
             row.index,
@@ -1086,14 +1088,14 @@
             money.format(row.netProfit),
             `${row.netReturnPct.toFixed(2)}%`,
           ];
-        const profitIndexes = retentionEnabled ? [9, 10] : [8, 9];
+        const profitIndexes = retentionEnabled ? [9, 10, 11, 12] : [8, 9];
 
         values.forEach((value, index) => {
           const td = document.createElement("td");
           td.textContent = value;
           if (profitIndexes.includes(index)) {
             const profit = retentionEnabled
-              ? (index === 9 ? row.cashPnl : row.combinedProfit)
+              ? ([9, 11].includes(index) ? row.cashPnl : row.combinedProfit)
               : row.netProfit;
             td.className = profit >= 0 ? "positive" : "negative";
           }

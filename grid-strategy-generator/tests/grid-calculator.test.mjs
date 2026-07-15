@@ -520,6 +520,14 @@ test("contains profit-retention controls and completion summary", () => {
   assert.match(html, /综合利润未扣除留存份额未来卖出费用/);
 });
 
+test("shows both return-rate columns in retained-profit grid plans", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+
+  assert.match(html, /"现金收益率", "综合收益率"/);
+  assert.match(html, /row\.cashReturnPct\.toFixed\(2\)/);
+  assert.match(html, /row\.combinedReturnPct\.toFixed\(2\)/);
+});
+
 test("exports retention settings, completion summary, and retained rows", () => {
   const { buildGridCsv } = loadExporter();
   const { calculateGrid } = loadCalculator();
