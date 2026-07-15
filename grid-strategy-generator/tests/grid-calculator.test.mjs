@@ -389,9 +389,87 @@ test("escapes CSV cells and creates a safe timestamped filename", () => {
     "\uFEFF名称,\"含,逗号\"\r\n说明,\"有\"\"引号\"\"\"",
   );
   assert.equal(
-    createExportFilename("  中证/500:ETF  ", new Date(2026, 6, 14, 9, 8, 7)),
-    "中证-500-ETF-网格策略-20260714-090807.csv",
+    createExportFilename("510500", "  中证/500:ETF  ", new Date(2026, 6, 14, 9, 8, 7)),
+    "510500-中证-500-ETF-网格策略-20260714-090807.csv",
   );
+  assert.equal(
+    createExportFilename("000905", "", new Date(2026, 6, 14, 9, 8, 7)),
+    "000905-网格策略-20260714-090807.csv",
+  );
+});
+
+test("exports a thermometer snapshot before pressure rows", () => {
+  const { buildGridCsv } = loadExporter();
+  const { calculateGrid } = loadCalculator();
+  const input = {
+    startPrice: 1, stepPct: 5, maxDropPct: 5, fundingMode: "perGrid",
+    amount: 10_000, feePct: 0, profitRetentionMultiple: 0,
+  };
+  const csv = buildGridCsv(input, calculateGrid(input), {
+    ...valuationSnapshot,
+    isSnapshot: true,
+  });
+
+  assert.ok(csv.indexOf("估值辅助,数值") < csv.indexOf("压力测试,数值"));
+  assert.match(csv, /标的代码,510500/);
+  assert.match(csv, /标的名称,中证500ETF南方/);
+  assert.match(csv, /指数温度,76\.00/);
+  assert.match(csv, /估值区间,偏高/);
+  assert.match(csv, /快照状态,历史快照，不是最新数据/);
+});
+
+test("exports PE and PB percentiles independently and handles no valuation", () => {
+  const { buildGridCsv } = loadExporter();
+  const { calculateGrid } = loadCalculator();
+  const input = {
+    startPrice: 1, stepPct: 5, maxDropPct: 5, fundingMode: "perGrid",
+    amount: 10_000, feePct: 0, profitRetentionMultiple: 0,
+  };
+  const result = calculateGrid(input);
+  const snapshot = {
+    version: 1, code: "000300", name: "沪深300", instrumentType: "index",
+    trackedIndex: { code: "000300", name: "沪深300" },
+    source: "historical_percentile", asOf: "2026-07-14",
+    queriedAt: "2026-07-15T10:00:00+08:00", cached: false,
+    thermometer: null,
+    percentiles: {
+      pe: { currentValue: 12.3, percentilePct: 40, startDate: "2016-07-14", endDate: "2026-07-14", sampleCount: 2400 },
+      pb: { currentValue: 1.4, percentilePct: 30, startDate: "2016-07-14", endDate: "2026-07-14", sampleCount: 2398 },
+    },
+    warnings: [], isSnapshot: false,
+  };
+
+  const csv = buildGridCsv(input, result, snapshot);
+  const emptyCsv = buildGridCsv(input, result, null);
+
+  assert.match(csv, /当前 PE,12\.30/);
+  assert.match(csv, /PE 历史分位,40\.00%/);
+  assert.match(csv, /PE 统计区间,2016-07-14 至 2026-07-14/);
+  assert.match(csv, /当前 PB,1\.40/);
+  assert.match(csv, /PB 历史分位,30\.00%/);
+  assert.match(csv, /PB 样本数,2398/);
+  assert.match(emptyCsv, /估值数据,暂无估值数据/);
+});
+
+test("renders and exports missing thermometer percentages as unavailable", () => {
+  const { buildView } = loadValuation();
+  const { buildValuationRows, serializeCsv } = loadExporter();
+  const snapshot = {
+    ...valuationSnapshot,
+    thermometer: {
+      ...valuationSnapshot.thermometer,
+      intrinsicReturnPct: null,
+      dividendYieldPct: null,
+    },
+  };
+
+  const view = buildView(snapshot);
+  const csv = serializeCsv(buildValuationRows(snapshot));
+
+  assert.equal(view.metrics.find((item) => item.label === "内在收益率").value, "--");
+  assert.equal(view.metrics.find((item) => item.label === "股息率").value, "--");
+  assert.match(csv, /内在收益率,--/);
+  assert.match(csv, /股息率,--/);
 });
 
 test("contains an offline CSV export action and latest-plan snapshot", () => {

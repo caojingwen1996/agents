@@ -673,11 +673,73 @@
         .replace(/[. ]+$/g, "");
     }
 
-    function createExportFilename(symbol, date = new Date()) {
-      return `${sanitizeFilenamePart(symbol)}-网格策略-${formatTimestamp(date)}.csv`;
+    function createExportFilename(code, name, date = new Date()) {
+      const identity = [sanitizeFilenamePart(code), sanitizeFilenamePart(name)].filter(Boolean);
+      return `${identity.join("-")}-网格策略-${formatTimestamp(date)}.csv`;
     }
 
-    function buildGridCsv(input, result) {
+    function buildMetricRows(label, metric) {
+      if (!metric) {
+        return [
+          [`当前 ${label}`, "--"],
+          [`${label} 历史分位`, "--"],
+          [`${label} 统计区间`, "--"],
+          [`${label} 样本数`, "--"],
+        ];
+      }
+      return [
+        [`当前 ${label}`, Number(metric.currentValue).toFixed(2)],
+        [`${label} 历史分位`, `${Number(metric.percentilePct).toFixed(2)}%`],
+        [`${label} 统计区间`, `${metric.startDate} 至 ${metric.endDate}`],
+        [`${label} 样本数`, metric.sampleCount],
+      ];
+    }
+
+    function formatOptionalPct(value) {
+      return value !== null && value !== "" && Number.isFinite(Number(value))
+        ? `${Number(value).toFixed(2)}%`
+        : "--";
+    }
+
+    function buildValuationRows(snapshot) {
+      if (!snapshot) {
+        return [["估值辅助", "数值"], ["估值数据", "暂无估值数据"], []];
+      }
+      const sourceLabel = snapshot.source === "youzhiyouxing"
+        ? "知行温度计"
+        : "历史 PE/PB 分位";
+      const rows = [
+        ["估值辅助", "数值"],
+        ["标的代码", snapshot.code || ""],
+        ["标的名称", snapshot.name || ""],
+        ["跟踪指数", [snapshot.trackedIndex?.code, snapshot.trackedIndex?.name].filter(Boolean).join(" ")],
+        ["数据来源", sourceLabel],
+        ["数据日期", snapshot.asOf || ""],
+        ["查询时间", snapshot.queriedAt || ""],
+        ["缓存状态", snapshot.cached ? "一小时缓存结果" : "本次查询结果"],
+        ["快照状态", snapshot.isSnapshot ? "历史快照，不是最新数据" : "最新查询结果"],
+      ];
+      if (snapshot.thermometer) {
+        rows.push(
+          ["指数温度", Number(snapshot.thermometer.temperature).toFixed(2)],
+          ["估值区间", snapshot.thermometer.valuationBand || ""],
+          ["内在收益率", formatOptionalPct(snapshot.thermometer.intrinsicReturnPct)],
+          ["股息率", formatOptionalPct(snapshot.thermometer.dividendYieldPct)],
+        );
+      } else {
+        rows.push(
+          ...buildMetricRows("PE", snapshot.percentiles?.pe),
+          ...buildMetricRows("PB", snapshot.percentiles?.pb),
+        );
+      }
+      for (const warning of snapshot.warnings || []) {
+        if (warning?.message) rows.push(["来源提示", warning.message]);
+      }
+      rows.push([]);
+      return rows;
+    }
+
+    function buildGridCsv(input, result, valuationSnapshot = null) {
       const fundingModeLabel = input.fundingMode === "total" ? "限定总资金" : "固定每格金额";
       const fundingLabel = input.fundingMode === "total" ? "总资金（元）" : "每格金额（元）";
       const retentionMultiple = Number(input.profitRetentionMultiple ?? 0);
@@ -695,6 +757,7 @@
         ["单边费率", `${Number(input.feePct).toFixed(3)}%`],
         ["留利润策略", retentionLabel],
         [],
+        ...buildValuationRows(valuationSnapshot),
         ["压力测试", "数值"],
         ["实际价格步长", result.meta.rawStep.toFixed(3)],
         ["覆盖跌幅", `${result.meta.coveragePct.toFixed(2)}%`],
@@ -762,6 +825,7 @@
 
     window.GridExporter = {
       buildGridCsv,
+      buildValuationRows,
       createExportFilename,
       escapeCsvCell,
       formatTimestamp,
@@ -779,11 +843,15 @@
     }
 
     function formatNumber(value, digits = 2) {
-      return Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : "--";
+      return value !== null && value !== "" && Number.isFinite(Number(value))
+        ? Number(value).toFixed(digits)
+        : "--";
     }
 
     function formatPct(value) {
-      return Number.isFinite(Number(value)) ? `${Number(value).toFixed(2)}%` : "--";
+      return value !== null && value !== "" && Number.isFinite(Number(value))
+        ? `${Number(value).toFixed(2)}%`
+        : "--";
     }
 
     function buildView(data) {
@@ -1158,14 +1226,14 @@
         : "每格金额（元）";
     }
 
-    function downloadPlanCsv(symbol, plan) {
-      const csv = window.GridExporter.buildGridCsv(plan.input, plan.result);
+    function downloadPlanCsv(code, name, plan, valuationSnapshot = null) {
+      const csv = window.GridExporter.buildGridCsv(plan.input, plan.result, valuationSnapshot);
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       try {
         const link = document.createElement("a");
         link.href = url;
-        link.download = window.GridExporter.createExportFilename(symbol);
+        link.download = window.GridExporter.createExportFilename(code, name);
         document.body.append(link);
         link.click();
         link.remove();
@@ -1455,7 +1523,9 @@
       }
 
       errorBox.hidden = true;
-      downloadPlanCsv(symbol, latestPlan);
+      const resolvedName = currentValuation?.code === symbol ? currentValuation.name : "";
+      const snapshot = currentValuation?.code === symbol ? currentValuation : null;
+      downloadPlanCsv(symbol, resolvedName, latestPlan, snapshot);
     });
 
     saveStrategyButton.addEventListener("click", () => {
@@ -1488,7 +1558,7 @@
       let indexSaved = false;
 
       try {
-        downloadPlanCsv(symbol, latestPlan);
+        downloadPlanCsv(symbol, resolvedName, latestPlan, snapshot);
         csvSaved = true;
       } catch (error) {
         console.error("CSV download failed", error);
