@@ -188,6 +188,7 @@ class ValuationServiceTests(unittest.TestCase):
 
     def test_thermometer_hit_uses_latest_detail_and_skips_percentiles(self):
         source = FakeMarketSource()
+        source.instrument = Instrument("510500", "中证500ETF南方", "etf", "", "中证500")
         result = self.build_service(source=source).lookup("510500")
 
         self.assertEqual(result["version"], 1)
@@ -195,6 +196,7 @@ class ValuationServiceTests(unittest.TestCase):
         self.assertEqual(result["asOf"], "2026-07-14")
         self.assertEqual(result["thermometer"]["temperature"], 76)
         self.assertEqual(result["thermometer"]["valuationBand"], "偏高")
+        self.assertEqual(result["trackedIndex"], {"code": "000905", "name": "中证500"})
         self.assertIsNone(result["percentiles"])
         self.assertEqual(source.pe_calls, 0)
         self.assertEqual(source.pb_calls, 0)

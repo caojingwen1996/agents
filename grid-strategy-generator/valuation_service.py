@@ -203,6 +203,10 @@ class ValuationService:
     ) -> dict[str, Any]:
         return {
             **self._base_result(instrument, queried_at, warnings),
+            "trackedIndex": {
+                "code": detail.get("indexCode") or instrument.tracked_index_code,
+                "name": detail.get("indexName") or instrument.tracked_index_name,
+            },
             "source": "youzhiyouxing",
             "asOf": detail.get("asOf"),
             "thermometer": {

@@ -52,6 +52,23 @@ class SourceParserTests(unittest.TestCase):
         self.assertEqual(row["dividendYieldPct"], 1.53)
         self.assertEqual(row["asOf"], "2026-07-14")
 
+    def test_parse_thermometer_detail_reads_name_from_code_card(self):
+        html = """
+        <div>
+          <div>\u4e2d\u8bc1500</div>
+          <p><span>000905.SH</span> \u5bbd\u57fa \u4e2d\u76d8 \u5747\u8861</p>
+        </div>
+        <div>76\u00b0 \u504f\u9ad8</div>
+        <h2>\u6307\u6570\u5386\u53f2\u6e29\u5ea6</h2>
+        """
+
+        row = parse_thermometer_detail(
+            html,
+            f"{THERMOMETER_URL.rsplit('/', 1)[0]}/data/indices/000905.SH",
+        )
+
+        self.assertEqual(row["indexName"], "\u4e2d\u8bc1500")
+
     def test_parse_tracking_target_reads_labeled_table_cell(self):
         self.assertEqual(
             parse_tracking_target_html(self.fixture("fund_basic.html")),
@@ -113,7 +130,7 @@ class InstrumentResolutionTests(unittest.TestCase):
             source.resolve("999999")
         self.assertEqual(context.exception.code, "UNSUPPORTED_INSTRUMENT")
 
-    def test_resolve_rejects_ambiguous_tracking_name(self):
+    def test_resolve_keeps_name_but_does_not_guess_between_index_code_aliases(self):
         source = self.build_source(
             etfs=[{"代码": "510500", "名称": "中证500ETF"}],
             indexes=[
@@ -122,9 +139,10 @@ class InstrumentResolutionTests(unittest.TestCase):
             ],
         )
 
-        with self.assertRaises(SourceError) as context:
-            source.resolve("510500")
-        self.assertEqual(context.exception.code, "AMBIGUOUS_INDEX")
+        instrument = source.resolve("510500")
+
+        self.assertEqual(instrument.tracked_index_name, "中证500")
+        self.assertEqual(instrument.tracked_index_code, "")
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_DIR))
 
-from server import create_server  # noqa: E402
+from server import HOST, create_available_server, create_server  # noqa: E402
 from valuation_service import ValuationError  # noqa: E402
 
 
@@ -80,6 +80,27 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(headers["content-type"].startswith("text/html"))
         self.assertIn("网格策略 1.0 生成器".encode("utf-8"), body)
+
+    def test_available_server_skips_an_occupied_port(self):
+        calls = []
+        available = object()
+
+        def server_factory(service, directory, *, host, port):
+            calls.append(port)
+            if port == 18765:
+                raise OSError("occupied")
+            return available
+
+        result = create_available_server(
+            self.service,
+            PROJECT_DIR,
+            host=HOST,
+            ports=[18765, 18766],
+            server_factory=server_factory,
+        )
+
+        self.assertIs(result, available)
+        self.assertEqual(calls, [18765, 18766])
 
 
 if __name__ == "__main__":

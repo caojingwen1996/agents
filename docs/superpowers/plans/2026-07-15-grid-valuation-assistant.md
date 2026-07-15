@@ -354,7 +354,7 @@ def test_api_returns_public_error_without_traceback(self):
 - [ ] Implement a loopback-only server and handler factory.
 
 ```python
-HOST, PORT = "127.0.0.1", 52341
+HOST, PREFERRED_PORTS = "127.0.0.1", tuple(range(18765, 18775))
 
 def make_handler(service, directory):
     class GridRequestHandler(SimpleHTTPRequestHandler):
@@ -372,8 +372,8 @@ def make_handler(service, directory):
     return functools.partial(GridRequestHandler, directory=directory)
 
 def main():
-    server = ThreadingHTTPServer((HOST, PORT), make_handler(build_service(), HERE))
-    print(f"网格策略工具：http://{HOST}:{PORT}/")
+    server = create_available_server(build_service(), ports=PREFERRED_PORTS)
+    print(f"网格策略工具：http://{HOST}:{server.server_port}/")
     server.serve_forever()
 ```
 
@@ -384,8 +384,7 @@ def main():
 cd /d "%~dp0"
 python -c "import akshare, bs4, requests" >nul 2>nul || python -m pip install -r requirements.txt
 if errorlevel 1 exit /b 1
-start "网格策略本地服务" /min python server.py
-powershell -NoProfile -Command "$u='http://127.0.0.1:52341/'; for($i=0;$i-lt 30;$i++){try{Invoke-WebRequest $u -UseBasicParsing|Out-Null; Start-Process $u; exit 0}catch{Start-Sleep -Milliseconds 300}}; exit 1"
+start "网格策略本地服务" /min python server.py --open-browser
 ```
 
 - [ ] Run server tests and the full Python suite.
@@ -647,12 +646,12 @@ Run: `python grid-strategy-generator/server.py`
 In another shell:
 
 ```powershell
-Get-NetTCPConnection -LocalPort 52341 | Select-Object LocalAddress,LocalPort,State
-Invoke-WebRequest http://127.0.0.1:52341/ -UseBasicParsing | Select-Object StatusCode
-Invoke-WebRequest "http://127.0.0.1:52341/api/valuation?code=abc" -SkipHttpErrorCheck | Select-Object StatusCode,Content
+Get-NetTCPConnection -LocalPort 18765 | Select-Object LocalAddress,LocalPort,State
+Invoke-WebRequest http://127.0.0.1:18765/ -UseBasicParsing | Select-Object StatusCode
+Invoke-WebRequest "http://127.0.0.1:18765/api/valuation?code=abc" -SkipHttpErrorCheck | Select-Object StatusCode,Content
 ```
 
-Expected: listening address is `127.0.0.1`, page status is 200, invalid code status is 422 with JSON and no traceback.
+Expected: the first available port in `18765`-`18774` listens only on `127.0.0.1`, page status is 200, and invalid code status is 422 with JSON and no traceback.
 
 - [ ] Use the in-app browser for desktop and 375px checks: empty, loading, successful thermometer or PE/PB, upstream failure, loaded snapshot, retry, keyboard order, and no horizontal overflow. Confirm grid generation still works while valuation is in error.
 

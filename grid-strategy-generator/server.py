@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import argparse
 import functools
 import json
+import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -18,7 +20,7 @@ from valuation_sources import (
 
 
 HOST = "127.0.0.1"
-PORT = 52341
+PREFERRED_PORTS = tuple(range(18765, 18775))
 HERE = Path(__file__).resolve().parent
 
 
@@ -64,9 +66,28 @@ def create_server(
     directory: Path = HERE,
     *,
     host: str = HOST,
-    port: int = PORT,
+    port: int = PREFERRED_PORTS[0],
 ) -> ThreadingHTTPServer:
     return ThreadingHTTPServer((host, port), make_handler(service, directory))
+
+
+def create_available_server(
+    service: Any,
+    directory: Path = HERE,
+    *,
+    host: str = HOST,
+    ports=PREFERRED_PORTS,
+    server_factory=create_server,
+) -> ThreadingHTTPServer:
+    last_error = None
+    for port in ports:
+        try:
+            return server_factory(service, directory, host=host, port=port)
+        except OSError as error:
+            last_error = error
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("没有配置可用的本地端口")
 
 
 def build_service() -> ValuationService:
@@ -78,8 +99,14 @@ def build_service() -> ValuationService:
 
 
 def main():
-    server = create_server(build_service())
-    print(f"网格策略工具：http://{HOST}:{PORT}/")
+    parser = argparse.ArgumentParser(description="网格策略本地服务")
+    parser.add_argument("--open-browser", action="store_true")
+    args = parser.parse_args()
+    server = create_available_server(build_service())
+    url = f"http://{HOST}:{server.server_port}/"
+    print(f"网格策略工具：{url}")
+    if args.open_browser:
+        webbrowser.open(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

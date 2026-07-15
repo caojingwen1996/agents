@@ -59,9 +59,16 @@ def parse_thermometer_listing(html: str) -> list[dict[str, Any]]:
     as_of = _parse_chinese_date(update_match.group(1)) if update_match else None
     rows: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
+    grouped_links: dict[str, list[str]] = {}
 
     for link in soup.find_all("a", href=True):
-        text = link.get_text(" ", strip=True)
+        href = str(link["href"])
+        if "/data/indices/" not in href:
+            continue
+        grouped_links.setdefault(href, []).append(link.get_text(" ", strip=True))
+
+    for href, fragments in grouped_links.items():
+        text = " ".join(fragment for fragment in fragments if fragment)
         code_match = INDEX_CODE_PATTERN.search(text)
         if not code_match:
             continue
@@ -83,7 +90,7 @@ def parse_thermometer_listing(html: str) -> list[dict[str, Any]]:
             "intrinsicReturnPct": _parse_pct(percentages[0]),
             "dividendYieldPct": _parse_pct(percentages[1]),
             "asOf": as_of,
-            "url": urljoin(THERMOMETER_URL, link["href"]),
+            "url": urljoin(THERMOMETER_URL, href),
         })
 
     if not rows:
@@ -96,6 +103,14 @@ def _labeled_percentage(text: str, label: str) -> Optional[float]:
     return _parse_pct(match.group(1)) if match else None
 
 
+def _index_name_near_code(soup: BeautifulSoup) -> Optional[str]:
+    code_node = soup.find(string=lambda value: bool(value and INDEX_CODE_PATTERN.search(value)))
+    if code_node is None:
+        return None
+    previous = code_node.find_previous(string=lambda value: bool(value and value.strip()))
+    return previous.strip() if previous else None
+
+
 def parse_thermometer_detail(html: str, url: str) -> dict[str, Any]:
     soup = BeautifulSoup(html, "html.parser")
     text = soup.get_text(" ", strip=True)
@@ -106,11 +121,14 @@ def parse_thermometer_detail(html: str, url: str) -> dict[str, Any]:
         text,
     )
     heading = soup.find(["h1", "h2"])
-    if not code_match or not temperature_match or heading is None:
+    index_name = _index_name_near_code(soup)
+    if index_name is None and heading is not None:
+        index_name = heading.get_text(" ", strip=True)
+    if not code_match or not temperature_match or not index_name:
         raise SourceError("THERMOMETER_FORMAT_CHANGED", "指数温度详情页结构已变化")
     return {
         "indexCode": code_match.group(1).upper(),
-        "indexName": heading.get_text(" ", strip=True),
+        "indexName": index_name,
         "temperature": float(temperature_match.group(1)),
         "valuationBand": temperature_match.group(2),
         "intrinsicReturnPct": _labeled_percentage(text, "内在收益率"),
@@ -201,7 +219,7 @@ def _unique_index(target: str, index_rows: Iterable[Mapping[str, Any]]) -> Mappi
         if normalize_name(row.get("display_name")) == target_name
     ]
     if len(matches) > 1:
-        raise SourceError("AMBIGUOUS_INDEX", "ETF 跟踪指数名称存在多个匹配")
+        return {"index_code": "", "display_name": matches[0]["display_name"]}
     if not matches:
         raise SourceError("TRACKING_INDEX_NOT_FOUND", "ETF 跟踪指数未在指数目录中匹配")
     return matches[0]
@@ -233,11 +251,12 @@ class AkshareSource:
         )
         if etf is not None:
             index = _unique_index(self._tracking_target(code), indexes)
+            tracked_index_code = str(index["index_code"] or "")
             return Instrument(
                 code=code,
                 name=str(etf.get("名称") or code),
                 instrument_type="etf",
-                tracked_index_code=str(index["index_code"]).zfill(6),
+                tracked_index_code=tracked_index_code.zfill(6) if tracked_index_code else "",
                 tracked_index_name=str(index["display_name"]),
             )
 
