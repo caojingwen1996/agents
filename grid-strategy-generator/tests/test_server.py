@@ -144,6 +144,22 @@ class ServerTests(unittest.TestCase):
         self.assertIs(result, available)
         self.assertEqual(calls, [18765, 18766])
 
+    def test_server_rejects_a_duplicate_listener_on_the_same_port(self):
+        duplicate = None
+        try:
+            with self.assertRaises(OSError):
+                duplicate = create_server(
+                    self.service,
+                    PROJECT_DIR,
+                    strategy_store=self.strategy_store,
+                    migration_status={},
+                    host="127.0.0.1",
+                    port=self.server.server_port,
+                )
+        finally:
+            if duplicate is not None:
+                duplicate.server_close()
+
     def test_migration_servers_keep_partial_success(self):
         calls = []
         working = object()

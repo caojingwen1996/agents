@@ -29,6 +29,10 @@ MAX_STRATEGY_BODY_BYTES = 2_000_000
 STRATEGY_STORE_PATH = HERE / "data" / "saved-strategies.json"
 
 
+class ExclusiveThreadingHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = False
+
+
 def make_handler(
     service: Any,
     directory: Path,
@@ -150,7 +154,7 @@ def create_server(
 ) -> ThreadingHTTPServer:
     store = strategy_store if strategy_store is not None else StrategyFileStore(STRATEGY_STORE_PATH)
     status = migration_status if migration_status is not None else {}
-    return ThreadingHTTPServer(
+    return ExclusiveThreadingHTTPServer(
         (host, port),
         make_handler(service, directory, store, status),
     )
