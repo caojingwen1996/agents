@@ -1,0 +1,20 @@
+{
+  "name": "cjwagents",
+  "interface": {
+    "displayName": "CJW Agents"
+  },
+  "plugins": [
+    {
+      "name": "strategy-backtest-expert",
+      "source": {
+        "source": "local",
+        "path": "./plugins/strategy-backtest-expert"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Finance"
+    }
+  ]
+}

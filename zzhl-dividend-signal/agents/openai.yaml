@@ -1,8 +1,0 @@
-interface:
-  display_name: "中证红利股息率信号"
-  short_description: "检查中证红利股息率、分位点和股债利差信号"
-  brand_color: "#2563EB"
-  default_prompt: "Use $zzhl-dividend-signal to check and record the latest 中证红利 dividend-yield signal."
-
-policy:
-  allow_implicit_invocation: true
